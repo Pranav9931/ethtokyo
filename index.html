@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Robot Rescue</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <canvas id="view"></canvas>
+
+  <header id="top">
+    <div class="brand"><span class="wmark"></span>Robot Rescue</div>
+    <span class="tag">World ID for Agents</span>
+    <div id="robot-pill" class="pill">connecting…</div>
+    <div id="me" class="me"></div>
+  </header>
+
+  <aside id="panel">
+    <section id="job-view" hidden></section>
+    <section id="board">
+      <h2>Job pool <span class="muted" id="pool-count"></span></h2>
+      <div id="jobs" class="jobs"></div>
+    </section>
+    <section>
+      <h2>Activity</h2>
+      <div id="log" class="log"></div>
+    </section>
+    <section>
+      <h2>Payouts by World ID</h2>
+      <div id="pay-info" class="muted" style="margin:-6px 0 10px"></div>
+      <div id="ledger" class="ledger muted">no payouts yet</div>
+    </section>
+  </aside>
+
+  <div id="scenario">
+    <span class="muted">Scenario</span>
+    <button class="sec" data-s="obstacle">Drop obstacle</button>
+    <button class="sec" data-s="person">Person walks in</button>
+    <button class="sec" data-s="knock">Knock the part</button>
+    <button class="ghost" data-s="reset">Reset</button>
+  </div>
+
+  <!-- World ID modal -->
+  <div id="wid" hidden role="dialog" aria-modal="true" aria-labelledby="wid-title">
+    <div class="wid-card">
+      <button class="wid-x" id="wid-close" aria-label="Close">×</button>
+      <div class="wid-logo"><span class="wmark"></span>World ID</div>
+      <div id="wid-body"></div>
+      <div class="wid-foot"><a href="https://world.org/legal" target="_blank" rel="noopener">Terms &amp; Privacy</a></div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

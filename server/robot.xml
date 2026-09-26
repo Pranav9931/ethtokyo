@@ -1,0 +1,63 @@
+<mujoco model="teleop_arm">
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+
+  <default>
+    <joint damping="2" armature="0.1"/>
+    <geom friction="0.9 0.005 0.0001" condim="3"/>
+    <default class="link"><geom type="capsule" size="0.045" rgba="0 0.36 1 1"/></default>
+    <default class="joint_vis"><geom type="cylinder" size="0.06 0.05" rgba="0.24 0.26 0.29 1" contype="0" conaffinity="0"/></default>
+    <default class="marker"><geom contype="0" conaffinity="0"/></default>
+    <position kp="250" kv="20" ctrllimited="true"/>
+  </default>
+
+  <worldbody>
+    <light pos="0 0 3" dir="0 0 -1"/>
+    <geom name="floor" type="plane" size="0 0 0.05" rgba="0.93 0.94 0.95 1"/>
+    <geom name="base" type="cylinder" size="0.18 0.06" pos="0 0 0.06" rgba="0.09 0.09 0.09 1"/>
+
+    <!-- drop zone marker (visual only) -->
+    <geom name="dropzone" class="marker" type="cylinder" size="0.16 0.004" pos="-0.55 0.35 0.004" rgba="0 0.76 0.19 0.45"/>
+
+    <body name="shoulder" pos="0 0 0.12">
+      <joint name="j_yaw" type="hinge" axis="0 0 1" range="-180 180"/>
+      <geom class="joint_vis" pos="0 0 0.05" size="0.12 0.05"/>
+      <body name="upper_arm" pos="0 0 0.1">
+        <joint name="j_shoulder" type="hinge" axis="0 1 0" range="-100 100"/>
+        <geom class="joint_vis" euler="90 0 0"/>
+        <geom class="link" fromto="0 0 0 0 0 0.45"/>
+        <body name="forearm" pos="0 0 0.45">
+          <joint name="j_elbow" type="hinge" axis="0 1 0" range="-140 140"/>
+          <geom class="joint_vis" euler="90 0 0"/>
+          <geom class="link" fromto="0 0 0 0 0 0.4" size="0.035"/>
+          <body name="hand" pos="0 0 0.42">
+            <geom name="hand" type="sphere" size="0.05" rgba="1 0.35 0 1"/>
+            <site name="tip" size="0.01"/>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <!-- the part the robot is supposed to sweep past / inspect -->
+    <body name="target" pos="0.6 0.25 0.07">
+      <freejoint name="target_free"/>
+      <geom name="target" type="box" size="0.07 0.07 0.07" mass="0.3" rgba="1 0.68 0 1"/>
+    </body>
+
+    <!-- immovable obstacle (a dropped crate); kinematic so the arm cannot shove it; parked far away until spawned -->
+    <body name="obstacle" mocap="true" pos="3 3 0.15">
+      <geom name="obstacle" type="box" size="0.15 0.15 0.15" rgba="0.44 0.26 0.13 1"/>
+    </body>
+
+    <!-- a person walking into the cell; kinematic (mocap) so it never falls over -->
+    <body name="person" mocap="true" pos="3 -3 0.9">
+      <geom name="person_body" type="capsule" size="0.16 0.5" rgba="0.53 0 1 1"/>
+      <geom name="person_head" type="sphere" size="0.13" pos="0 0 0.75" rgba="0.95 0.75 0.65 1"/>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <position name="yaw" joint="j_yaw" ctrlrange="-3.14 3.14"/>
+    <position name="shoulder" joint="j_shoulder" ctrlrange="-1.7 1.7"/>
+    <position name="elbow" joint="j_elbow" ctrlrange="-2.4 2.4"/>
+  </actuator>
+</mujoco>
