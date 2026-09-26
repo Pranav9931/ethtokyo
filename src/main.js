@@ -109,7 +109,7 @@ function renderKf() {
   el.parentElement.querySelectorAll('button').forEach((b) => { b.disabled = kf.playing || !!kf.recorder ? !b.dataset.kfStop : (b.dataset.kf === 'play' || b.dataset.kf === 'export') && kf.frames.length < 2; });
 }
 // ---------- voice: push-to-talk through the robot's speaker ----------
-const bubble = createBubble(document.body, () => viewer.projectHead());
+const bubble = createBubble(document.body, () => { const p = viewer.projectHead(); if (!p) return null; const r = viewer.canvas.getBoundingClientRect(); return { x: p.x + r.left, y: p.y + r.top }; });
 const speaker = createSpeaker({ onTranscript: (t, f) => bubble.show(t, f) });
 const talker = createTalker({
   send: (m) => { if (ws?.readyState === 1) ws.send(JSON.stringify(m)); },

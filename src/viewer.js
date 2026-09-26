@@ -84,8 +84,9 @@ export function createViewer(canvas) {
     const m = headMeshIndex >= 0 ? meshes[headMeshIndex] : null; if (!m) return null;
     tmpV.setFromMatrixPosition(m.matrixWorld); tmpV.project(camera);
     if (tmpV.z > 1) return null;
-    const r = canvas.getBoundingClientRect();
-    return { x: (tmpV.x + 1) / 2 * r.width + r.left, y: (1 - tmpV.y) / 2 * r.height + r.top - 40 };
+    // local (untransformed) canvas space, so it stays right when the app is CSS-rotated into landscape
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    return { x: (tmpV.x + 1) / 2 * w, y: (1 - tmpV.y) / 2 * h - 40 };
   }
 
   let meshes = [], robotMeshes = [];
@@ -175,9 +176,11 @@ export function createViewer(canvas) {
   canvas.addEventListener('pointercancel', endDrag);
   function setDragEnabled(on) { dragEnabled = !!on; if (!on) { canvas.style.cursor = ''; if (hover) { hover.material.emissive.setHex(0); hover = null; } } }
 
-  function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+  let sizeOverride = null;
+  function resize() { const w = sizeOverride?.[0] || innerWidth, h = sizeOverride?.[1] || innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+  function setSize(w, h) { sizeOverride = w && h ? [w, h] : null; resize(); }
   addEventListener('resize', resize); resize();
   (function loop() { controls.update(); mixer?.update(clock.getDelta()); renderer.render(scene, camera); requestAnimationFrame(loop); })();
 
-  return { setGeoms, setPoses, setPerson, projectHead, resetCamera, setDragEnabled, set onDrag(fn) { onDrag = fn; }, canvas };
+  return { setGeoms, setPoses, setPerson, projectHead, resetCamera, setDragEnabled, setSize, set onDrag(fn) { onDrag = fn; }, canvas };
 }

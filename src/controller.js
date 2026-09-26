@@ -12,6 +12,18 @@ function toast(msg, level = 'info') { const el = document.createElement('div'); 
 async function api(path, opts = {}) { const r = await fetch(path, { headers: { 'content-type': 'application/json' }, ...opts }); const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(b.error || r.statusText); return b; }
 
 const viewer = createViewer($('#view'));
+// Always landscape: when the phone is upright, rotate the whole app with CSS and render the 3D view at swapped dimensions.
+const portraitQ = matchMedia('(orientation: portrait)');
+function applyOrientation() {
+  // measured viewport, so the rotated app is exactly screen-sized (100vh/100vw overflow on phones)
+  const vw = window.visualViewport?.width || innerWidth, vh = window.visualViewport?.height || innerHeight;
+  document.documentElement.style.setProperty('--vw', `${Math.round(vw)}px`); document.documentElement.style.setProperty('--vh', `${Math.round(vh)}px`);
+  window.scrollTo(0, 0);
+  const upright = vh > vw;
+  document.body.classList.toggle('force-landscape', upright);
+  viewer.setSize(upright ? vh : vw, upright ? vw : vh);
+}
+portraitQ.addEventListener?.('change', applyOrientation); addEventListener('resize', applyOrientation); window.visualViewport?.addEventListener('resize', applyOrientation); addEventListener('orientationchange', () => setTimeout(applyOrientation, 150)); applyOrientation();
 const state = { me: null, robot: null, jobs: [], actuators: [], limbs: [], job: null, linked: false };
 const ctl = { limb: 4, page: 0, sticks: { L: { x: 0, y: 0 }, R: { x: 0, y: 0 } }, rate: 1.4, targets: [], dirty: false, hold: false, kf: [] };
 let ws;
@@ -97,7 +109,7 @@ function loop(now) {
 function syncTargets() { if (state.robot) ctl.targets = Array.from(state.robot.ctrl); ctl.dirty = false; }
 
 // ---------- voice (push-to-talk on the TALK button) ----------
-const bubble = createBubble(document.body, () => viewer.projectHead());
+const bubble = createBubble($('#app'), () => viewer.projectHead());
 const speaker = createSpeaker({ onTranscript: (t, f) => bubble.show(t, f) });
 const talker = createTalker({
   send: (m) => { if (ws?.readyState === 1) ws.send(JSON.stringify(m)); },
@@ -110,7 +122,8 @@ $('#btn-talk').addEventListener('pointerdown', (ev) => { ev.preventDefault(); if
 // ---------- sticks ----------
 document.querySelectorAll('.stick').forEach((el) => {
   const id = el.dataset.stick, knob = el.querySelector('.knob'); let pid = null;
-  const set = (ev) => { const r = el.getBoundingClientRect(), rad = r.width / 2; let x = (ev.clientX - r.left - rad) / rad, y = (ev.clientY - r.top - rad) / rad; const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; } ctl.sticks[id] = { x, y }; knob.style.transform = `translate(${x * rad * .58}px, ${y * rad * .58}px)`; };
+  // offsetX/Y are in the element's own (untransformed) space, so sticks read correctly in forced-landscape mode too
+  const set = (ev) => { const rad = el.clientWidth / 2; let x = (ev.offsetX - rad) / rad, y = (ev.offsetY - rad) / rad; const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; } ctl.sticks[id] = { x, y }; knob.style.transform = `translate(${x * rad * .58}px, ${y * rad * .58}px)`; };
   const end = () => { pid = null; ctl.sticks[id] = { x: 0, y: 0 }; knob.style.transform = ''; el.classList.remove('active'); };
   el.addEventListener('pointerdown', (ev) => { pid = ev.pointerId; el.setPointerCapture(pid); el.classList.add('active'); set(ev); buzz(8); ev.preventDefault(); });
   el.addEventListener('pointermove', (ev) => { if (ev.pointerId === pid) set(ev); });
