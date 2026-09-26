@@ -280,6 +280,14 @@ app.post('/api/agent/tasks/:id', agentAuth, (req, res) => {
   broadcast({ t: 'toast', level: 'ok', msg: `Agent (${agent.info().model}) answered ${req.params.id.split('-')[0]} task.` });
   res.json(r);
 });
+app.post('/api/agent/jobs/:id/withdraw', agentAuth, (req, res) => {
+  const job = jobs.withdraw(req.params.id, String(req.body.reason || 'no longer needed'));
+  if (!job) return res.status(409).json({ error: 'job is not open or claimed' });
+  if (sim.status().mode === 'stuck' && !sim.resumeCheck()) sim.endTeleop(); // robot was only waiting for a human: back to work
+  broadcast({ t: 'jobs', jobs: jobs.list(), log: jobs.log, ledger: ledger.summary() });
+  broadcast({ t: 'toast', level: 'warn', msg: `Job ${job.id} withdrawn by the agent: ${job.review.summary}` });
+  res.json({ ok: true, job });
+});
 app.post('/api/agent/hello', agentAuth, (req, res) => { broadcast({ t: 'jobs', jobs: jobs.list(), log: jobs.log, ledger: ledger.summary() }); res.json({ ok: true, name: agent.info().model, pending: agent.pendingTasks().length }); });
 
 // Demo failure path: a client posts a forged/tampered callback straight to the backend.

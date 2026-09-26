@@ -139,7 +139,7 @@ function jobCard(j, live) {
 function verdictLine(j) {
   const p = paymentFor(j.id);
   if (!j.review) return `<div class="verdict"><span class="muted">completed ${j.doneAt ? ago(j.doneAt) : ''}</span></div>`;
-  return `<div class="verdict">${j.review.approved ? `<span class="ok">Approved · ${j.review.efficiency}%</span>` : '<span class="bad">Rejected</span>'}
+  return `<div class="verdict">${j.review.approved ? `<span class="ok">Approved · ${j.review.efficiency}%</span>` : j.review.withdrawn ? '<span class="muted">Withdrawn by the agent</span>' : '<span class="bad">Rejected</span>'}
     ${j.review.approved ? `<span>${j.paid} WLD</span>` : ''}${j.workerSub ? `<span class="human"><span class="wmark"></span>human · <code>${esc(short(j.workerSub))}</code></span>` : ''}
     ${p?.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" data-stop="1">${p.status === 'confirmed' ? 'paid on-chain ↗' : esc(p.status) + ' ↗'}</a>` : p ? `<span class="muted">${esc(p.status)}</span>` : ''}
     <span class="muted">${j.doneAt ? ago(j.doneAt) : ''}</span></div>`;

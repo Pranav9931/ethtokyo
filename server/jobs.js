@@ -64,6 +64,15 @@ export class Jobs extends EventEmitter {
     this.note(job, review.approved ? `approved at ${review.efficiency}% efficiency, ${paid} WLD to ${job.workerSub.slice(0, 10)}…` : `rejected by the agent: ${review.summary}`);
     return job;
   }
+  // The agent takes an unstarted job back (e.g. the robot recovered on its own). Nobody is paid; the card shows "withdrawn".
+  withdraw(id, why) {
+    const job = this.jobs.get(id);
+    if (!job || !['open', 'claimed'].includes(job.state)) return null;
+    job.state = 'done'; job.claimedBy = null; job.claimExpiresAt = null; job.workerSub = null; job.doneAt = Date.now(); job.paid = 0;
+    job.review = { approved: false, withdrawn: true, efficiency: 0, payout_fraction: 0, summary: why, source: 'agent' };
+    this.note(job, `withdrawn by the agent: ${why}`);
+    return job;
+  }
   sweepExpired() {
     const now = Date.now(), expired = [];
     for (const j of this.jobs.values()) if (j.state === 'claimed' && now > j.claimExpiresAt) { this.release(j.id, 'verification timed out'); expired.push(j); }

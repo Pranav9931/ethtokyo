@@ -234,7 +234,7 @@ function openSheet() {
     <p>${esc(job.detail)}</p>
     ${job.steps?.length ? `<div class="k">Steps</div><ol>${job.steps.map((x) => `<li>${esc(x)}</li>`).join('')}</ol>` : ''}
     ${job.acceptance?.length ? `<div class="k">Done when</div><ul>${job.acceptance.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
-    ${job.review ? `<div class="verdict ${job.review.approved ? '' : 'bad'}"><b>${job.review.approved ? `Approved · ${job.review.efficiency}% · ${job.paid} WLD` : 'Rejected'}</b><div class="muted small">${esc(job.review.summary)}</div></div>` : ''}
+    ${job.review ? `<div class="verdict ${job.review.approved ? '' : 'bad'}"><b>${job.review.approved ? `Approved · ${job.review.efficiency}% · ${job.paid} WLD` : job.review.withdrawn ? 'Withdrawn by the agent' : 'Rejected'}</b><div class="muted small">${esc(job.review.summary)}</div></div>` : ''}
     <div class="row">
       ${job.state === 'open' ? `<button class="wid" data-claim="${job.id}">Accept · Verify with World ID</button>` : ''}
       ${job.state === 'claimed' && mine ? `<button data-cancel="${job.id}">Cancel claim</button>` : ''}

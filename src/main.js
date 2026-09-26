@@ -354,7 +354,7 @@ function renderBoard() {
     <div class="job ${j.state}">
       <div class="title"><span class="urg ${j.urgency}">${j.urgency}</span>${esc(j.title)}</div>
       <div class="reward">${j.reward} WLD</div>
-      <div class="meta">#${j.id} · ${j.state === 'reviewing' ? 'agent reviewing' : j.state === 'done' && j.review ? (j.review.approved ? `approved ${j.review.efficiency}% · ${j.paid} WLD` : 'rejected') : j.state}${j.workerSub ? ' · ' + esc(short(j.workerSub)) : ''} · ${j.agent?.model ? 'by agent' : 'by rules'} · ${ago(j.postedAt)}</div>
+      <div class="meta">#${j.id} · ${j.state === 'reviewing' ? 'agent reviewing' : j.state === 'done' && j.review ? (j.review.approved ? `approved ${j.review.efficiency}% · ${j.paid} WLD` : j.review.withdrawn ? 'withdrawn' : 'rejected') : j.state}${j.workerSub ? ' · ' + esc(short(j.workerSub)) : ''} · ${j.agent?.model ? 'by agent' : 'by rules'} · ${ago(j.postedAt)}</div>
       <div class="actions">
         ${j.state === 'open' ? `<button class="btn-world" data-claim="${j.id}"><span class="wmark"></span>Accept · Verify with World ID</button>` : ''}
         ${j.state !== 'open' ? `<button class="sec small" data-open="${j.id}">View</button>` : ''}
@@ -400,7 +400,7 @@ function renderJobView() {
   jobViewKey = key;
 
   let cls = 'warn', stateLine;
-  if (job.state === 'done' && job.review) { cls = job.review.approved ? 'ok' : 'bad'; stateLine = job.review.approved ? `Approved by the agent at <b>${job.review.efficiency}%</b> efficiency: <b>${job.paid} WLD</b> of ${job.reward} to ${humanBadge(job.workerSub)}<br><span class="muted">${esc(job.review.summary)}</span>` : `Rejected by the agent, no payout.<br><span class="muted">${esc(job.review.summary)}</span>`; }
+  if (job.state === 'done' && job.review) { cls = job.review.approved ? 'ok' : job.review.withdrawn ? '' : 'bad'; stateLine = job.review.approved ? `Approved by the agent at <b>${job.review.efficiency}%</b> efficiency: <b>${job.paid} WLD</b> of ${job.reward} to ${humanBadge(job.workerSub)}<br><span class="muted">${esc(job.review.summary)}</span>` : job.review.withdrawn ? `Withdrawn by the agent.<br><span class="muted">${esc(job.review.summary)}</span>` : `Rejected by the agent, no payout.<br><span class="muted">${esc(job.review.summary)}</span>`; }
   else if (job.state === 'done') { cls = 'ok'; stateLine = `Completed. ${job.reward} WLD paid to ${humanBadge(job.workerSub)}`; }
   else if (job.state === 'reviewing') { stateLine = `<span class="spinner"></span> Submitted. The robot's agent is verifying the work and scoring efficiency…`; }
   else if (inControl) { cls = 'ok'; stateLine = `${humanBadge(job.workerSub)} You are teleoperating the robot.`; }
