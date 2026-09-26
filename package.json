@@ -4,13 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n server,web \"PUBLIC_URL=http://localhost:5173 node server/index.js\" \"vite\"",
+    "dev": "concurrently -n server,web \"PUBLIC_URL=http://localhost:5173 node server/index.js\" \"vite\"",
+    "serve": "vite build && PUBLIC_URL=http://localhost:8787 node server/index.js",
     "server": "node server/index.js",
     "web": "vite",
     "build": "vite build",
     "start": "node server/index.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "@mujoco/mujoco": "^3.14.0",
     "@worldcoin/idkit-core": "^4.3.0",
     "dotenv": "^17.0.0",
@@ -20,7 +22,8 @@
     "qrcode": "^1.5.4",
     "three": "^0.186.1",
     "viem": "^2.56.9",
-    "ws": "^8.21.3"
+    "ws": "^8.21.3",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",

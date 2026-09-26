@@ -8,21 +8,24 @@ export class Jobs extends EventEmitter {
   constructor(db) { super(); this.jobs = new Map(); this.log = []; this.db = db; }
   hydrate(rows) { for (const j of rows) this.jobs.set(j.id, j); }
 
-  post({ reason, title, detail, urgency, reward }) {
+  post({ reason, title, detail, urgency, reward, steps = [], acceptance = [], agent = null, context = null }) {
     const job = {
-      id: randomUUID().slice(0, 8), reason, title, detail, urgency, reward,
-      state: 'open',                 // open | claimed | active | done
+      id: randomUUID().slice(0, 8), reason, title, detail, urgency, reward, steps, acceptance, agent, context,
+      state: 'open',                 // open | claimed | active | reviewing | done
       postedAt: Date.now(), claimedBy: null, claimExpiresAt: null, workerSub: null, activatedAt: null, doneAt: null,
+      review: null, paid: null,
+      telemetry: { actions: [], ctrl_messages: 0, drag_events: 0, premature_complete_attempts: 0 },
       history: [],
     };
     this.jobs.set(job.id, job);
-    this.note(job, 'posted to the global pool');
+    this.note(job, agent?.source && agent.source !== 'fallback' ? `posted by the robot's agent (${agent.source})` : 'posted to the global pool');
     return job;
   }
   clear() { this.jobs.clear(); this.log.length = 0; this.emit('change', null); }
   get(id) { return this.jobs.get(id); }
   list() { return [...this.jobs.values()].sort((a, b) => b.postedAt - a.postedAt); }
-  current() { return this.list().find(j => j.state !== 'done') || null; }
+  current() { return this.list().find(j => j.state === 'open' || j.state === 'claimed' || j.state === 'active') || null; }
+  track(id, field, value) { const j = this.jobs.get(id); if (!j?.telemetry) return; if (field === 'actions') j.telemetry.actions.push(value); else j.telemetry[field] = (j.telemetry[field] || 0) + 1; }
 
   claim(id, sessionId) {
     const job = this.jobs.get(id);
@@ -46,11 +49,19 @@ export class Jobs extends EventEmitter {
     this.note(job, `back in the pool: ${why}`);
     return job;
   }
-  complete(id, sessionId) {
+  // The human says done: the job goes to the agent for review before anything is paid.
+  submit(id, sessionId) {
     const job = this.jobs.get(id);
     if (!job || job.state !== 'active' || job.claimedBy !== sessionId) return null;
-    job.state = 'done'; job.doneAt = Date.now();
-    this.note(job, `completed, ${job.reward} WLD paid to ${job.workerSub.slice(0, 10)}…`);
+    job.state = 'reviewing'; job.doneAt = Date.now();
+    this.note(job, 'submitted, agent is verifying the work');
+    return job;
+  }
+  finish(id, review, paid) {
+    const job = this.jobs.get(id);
+    if (!job || job.state !== 'reviewing') return null;
+    job.state = 'done'; job.review = review; job.paid = paid;
+    this.note(job, review.approved ? `approved at ${review.efficiency}% efficiency, ${paid} WLD to ${job.workerSub.slice(0, 10)}…` : `rejected by the agent: ${review.summary}`);
     return job;
   }
   sweepExpired() {
@@ -71,13 +82,29 @@ export class Jobs extends EventEmitter {
 // Payouts keyed by the World ID identity (nullifier): same human => same identity => one balance, one payout wallet.
 // Payment: { id, sub, amount, jobId, to, status: simulated | pending_address | submitting | submitted | confirmed | failed, hash, url, error, at }
 export class Ledger extends EventEmitter {
-  constructor(payments, db) { super(); this.payments = payments; this.db = db; this.list = []; this.addresses = new Map(); this.seq = 0; }
-  hydrate({ workers, payments }) {
-    for (const w of workers) if (w.payoutAddress) this.addresses.set(w.nullifier, w.payoutAddress);
-    this.list = payments; this.seq = payments.reduce((m, p) => Math.max(m, p.id), 0);
+  constructor(payments, db) { super(); this.payments = payments; this.db = db; this.list = []; this.addresses = new Map(); this.aliases = new Map(); this.seq = 0; }
+  hydrate({ workers, payments, aliases = [] }) {
+    for (const a of aliases) this.aliases.set(a.nullifier, a.canonical);
+    for (const w of workers) if (w.payoutAddress) this.addresses.set(this.canonical(w.nullifier), w.payoutAddress);
+    this.list = payments.map((p) => ({ ...p, sub: this.canonical(p.sub) })); this.seq = payments.reduce((m, p) => Math.max(m, p.id), 0);
+    for (const p of this.list) if (p.status === 'pending_address' && this.address(p.sub)) { p.to = this.address(p.sub); this.submit(p); }
+  }
+  // World ID 4.0 nullifiers are action-scoped and we mint an action per attempt, so one human shows up with a new
+  // nullifier on every job. The first nullifier a browser session verifies with becomes its canonical worker id;
+  // later ones are linked to it (and to its payout wallet).
+  canonical(sub) { return this.aliases.get(sub) || sub; }
+  link(nullifier, canonical) {
+    canonical = this.canonical(canonical);
+    if (!nullifier || nullifier === canonical) return canonical;
+    this.aliases.set(nullifier, canonical);
+    if (!this.addresses.get(canonical) && this.addresses.get(nullifier)) this.addresses.set(canonical, this.addresses.get(nullifier));
+    for (const p of this.list) if (p.sub === nullifier) { p.sub = canonical; if (p.status === 'pending_address' && this.address(canonical)) { p.to = this.address(canonical); this.submit(p); } }
+    this.db?.saveAlias(nullifier, canonical).catch((e) => console.error('[db] saveAlias', e.message));
+    this.emit('change');
+    return canonical;
   }
   persist(p) { this.db?.savePayment(p).catch((e) => console.error('[db] savePayment', e.message)); }
-  address(sub) { return this.addresses.get(sub) || null; }
+  address(sub) { return this.addresses.get(this.canonical(sub)) || null; }
   setAddress(sub, address) {
     this.addresses.set(sub, address);
     this.db?.saveWorker(sub, address).catch((e) => console.error('[db] saveWorker', e.message));

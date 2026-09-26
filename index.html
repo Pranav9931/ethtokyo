@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Robot Rescue</title>
   <link rel="stylesheet" href="/src/style.css" />
 </head>
@@ -13,6 +13,7 @@
     <div class="brand"><span class="wmark"></span>Robot Rescue</div>
     <span class="tag">World ID for Agents</span>
     <div id="robot-pill" class="pill">connecting…</div>
+    <div id="agent-info" class="tag"></div>
     <div id="me" class="me"></div>
   </header>
 
@@ -39,6 +40,7 @@
     <button class="sec" data-s="person">Person walks in</button>
     <button class="sec" data-s="knock">Knock the part</button>
     <button class="ghost" data-s="reset">Reset</button>
+    <button class="ghost" data-reset-cam="1" title="Reset camera">⌂ Camera</button>
   </div>
 
   <!-- World ID modal -->
@@ -51,6 +53,7 @@
     </div>
   </div>
 
+  <div id="pad" hidden></div>
   <div id="toasts"></div>
   <script type="module" src="/src/main.js"></script>
 </body>

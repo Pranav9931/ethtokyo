@@ -4,16 +4,16 @@
 
 World ID is the trust layer: it decides who can take a job and who gets paid. This platform posts jobs to a global pool of verified humans, gates robot control behind a fresh World ID verification, and pays the reward to the worker's World ID `sub`.
 
-Built for the *World ID for Agents* track. Physics is [MuJoCo](https://mujoco.org/) running as WebAssembly in Node (the official `@mujoco/mujoco` bindings), rendered in the browser with three.js.
+Built for the *World ID for Agents* track. Physics is [MuJoCo](https://mujoco.org/) running as WebAssembly in Node (the official `@mujoco/mujoco` bindings), rendered in the browser with three.js. The robot is a **Unitree G1 humanoid** (29 position-controlled joints, official MJCF and meshes, BSD-3) working at a bench, pelvis welded to a stand so it can be posed freely without falling.
 
 ## The loop
 
-1. **Robot works autonomously.** A 3-DoF arm runs an inspection sweep in MuJoCo.
+1. **Robot works autonomously.** The G1 runs an endless pick-and-place loop in MuJoCo: boxes arrive on a feeder, it grasps each one, lifts it, carries it to the bin on its right and releases it. The grasp is kinematic (the held box is pinned to the hand), since the official WASM bindings don't yet expose runtime constraint toggling.
 2. **Robot gets stuck** and holds position. Three triggers exist, two of them physics-driven:
    - *hazard*: a person comes within 0.6 m of the end effector
-   - *obstructed*: joint tracking error stays high for 3 s (a crate in the sweep path)
-   - *low confidence*: the target part is not where the plan expects it
-3. **Its agent posts a job**: what's needed, urgency, reward. It appears on the job board for everyone connected.
+   - *obstructed*: joint tracking error stays high for 3 s (a crate dropped on the feeder, in the reach path)
+   - *low confidence*: the next box is not on the feeder mark, or the grasp missed
+3. **Its agent writes the job.** The robot hands its telemetry (reason, contacts, joint state, what it can offer the operator) to its agent, Claude (`claude-opus-5`, structured output). The agent decides what to ask for: title, brief, ordered steps, acceptance criteria, urgency and a reward inside the allowed range (0.05 to 0.1 WLD). The job appears on the board with a "situation snapshot" so anyone can see what the robot got into; without a key a rule-based fallback authors the same shape.
 4. **A human accepts it.** The "Connect your World ID" modal opens with a QR code built by the official SDK (`@worldcoin/idkit-core`) against the **sandbox** environment. The backend signs the RP context with `signRequest`, the proof is bound to this job and browser session via the signal, and the backend forwards the proof to the Developer Portal verify endpoint (`/api/v4/verify/{rp_id}`) and checks the returned environment and action. The RP-scoped **nullifier** is the worker's identity.
 5. **Control unlocks only after validation.** Teleop commands over the WebSocket are accepted only from the session that holds the active, verified claim.
 6. **Done.** The human marks the job complete, the robot resumes autonomy, and the reward (0.05 to 0.1 WLD depending on urgency) is paid in **WLD on World Chain** to the worker's payout wallet, keyed by their World ID nullifier. Same human, same nullifier, one balance and one wallet: no reward farming with multiple accounts.
@@ -65,14 +65,26 @@ Without World ID credentials the server runs a **local mock World App**: the bro
 server/index.js      HTTP + WebSocket server, job/auth wiring, 60 Hz sim loop
 server/sim.js        MuJoCo world, autopilot, stuck detection, teleop input
 server/jobs.js       job pool state machine + payout ledger keyed by sub
+server/agent.js      the robot's agent: authors jobs when stuck, reviews and scores completed work (Claude, with rule-based fallback)
 server/worldid.js    IDKit verification: RP signing, portal verify, replay guard (+ mock signer)
 server/auth.js       optional OIDC relying party (discovery, PKCE, JWKS verification)
 server/mock-world.js local stand-in for World App (Verify / Cancel / tampered proof)
-server/robot.xml     MJCF model: arm, target part, crate, person
+server/scenes/       Unitree G1 model, meshes and the Robot Rescue scene (bench, part, crate, person, stand)
 src/main.js          job board, job/teleop panel, WebSocket client
-src/viewer.js        three.js renderer fed by the server's pose stream
+src/viewer.js        three.js renderer (primitives + STL meshes) fed by the pose stream, with drag-to-pose
 scripts/e2e.mjs      scripted walk-through of all flows
 ```
+
+## Teleoperation
+
+Once verified, the human gets purpose-built actions for the job (tuck arms, ask the person to step back, route over the crate, accept the part's new position, …) and the robot only resumes when the job's safety condition holds. Under **Manual control**:
+
+- **Drag a limb** in the 3D view: the grabbed body is pulled toward the mouse by a spring while that limb's actuators are relaxed; on release the pose is held. Works on any limb, server-side, so it's still gated by the verified claim.
+- **Joint sliders** grouped by limb (left/right leg, waist, left/right arm), 29 joints.
+- **Keyframes**: save poses (button or `K`), play them back with smooth interpolation, and **export a video** (`.webm`) of the playback straight from the 3D canvas.
+- `⌂ Camera` resets the view.
+
+The G1 model and meshes live in `server/scenes/unitree_g1` (Unitree's BSD-3 license included); the server loads them through MuJoCo's virtual file system and serves the STL files to the browser.
 
 ## Payouts
 

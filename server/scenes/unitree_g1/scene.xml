@@ -1,0 +1,62 @@
+<mujoco model="robot_rescue_g1">
+  <!-- Unitree G1 (BSD-3, see LICENSE) welded to a stand, in the Robot Rescue cell. -->
+  <include file="g1_fixed.xml"/>
+  <option timestep="0.002" integrator="implicitfast"/>
+
+  <default>
+    <default class="marker"><geom contype="0" conaffinity="0"/></default>
+  </default>
+
+  <worldbody>
+    <light pos="1 1 3" dir="-0.3 -0.3 -1" diffuse="0.8 0.8 0.8"/>
+    <light pos="-2 -1 2.5" dir="0.5 0.3 -1" diffuse="0.4 0.4 0.4"/>
+    <geom name="floor" type="plane" size="0 0 0.05" rgba="0.93 0.94 0.95 1"/>
+
+    <!-- stand holding the pelvis at 0.793 m -->
+    <geom name="stand_post" type="cylinder" size="0.04 0.36" pos="-0.16 0 0.36" rgba="0.24 0.26 0.29 1"/>
+    <geom name="stand_arm" type="box" size="0.05 0.03 0.02" pos="-0.13 0 0.74" rgba="0.24 0.26 0.29 1"/>
+    <geom name="stand_base" type="cylinder" size="0.22 0.02" pos="-0.16 0 0.02" rgba="0.09 0.09 0.09 1"/>
+
+    <!-- workbench, feeder pedestal (boxes arrive here) and the bin on the robot's right -->
+    <geom name="bench" type="box" size="0.25 0.35 0.02" pos="0.5 0 0.72" rgba="0.82 0.72 0.55 1"/>
+    <geom name="bench_leg1" type="box" size="0.02 0.02 0.35" pos="0.3 -0.3 0.35" rgba="0.6 0.5 0.38 1"/>
+    <geom name="bench_leg2" type="box" size="0.02 0.02 0.35" pos="0.7 -0.3 0.35" rgba="0.6 0.5 0.38 1"/>
+    <geom name="bench_leg3" type="box" size="0.02 0.02 0.35" pos="0.3 0.3 0.35" rgba="0.6 0.5 0.38 1"/>
+    <geom name="bench_leg4" type="box" size="0.02 0.02 0.35" pos="0.7 0.3 0.35" rgba="0.6 0.5 0.38 1"/>
+    <geom name="feeder" type="box" size="0.08 0.11 0.045" pos="0.40 0 0.785" rgba="0.24 0.26 0.29 1"/>
+    <geom name="feeder_mark" class="marker" type="box" size="0.07 0.10 0.003" pos="0.40 0 0.833" rgba="0 0.76 0.19 0.5"/>
+    <!-- outfeed conveyor: starts under the drop point and runs away from the robot to the cell exit -->
+    <geom name="belt" type="box" size="0.15 1.05 0.015" pos="0.25 -1.35 0.705" rgba="0.16 0.17 0.2 1"/>
+    <geom name="belt_rail1" type="box" size="0.015 1.05 0.04" pos="0.09 -1.35 0.73" rgba="0.55 0.58 0.62 1"/>
+    <geom name="belt_rail2" type="box" size="0.015 1.05 0.04" pos="0.41 -1.35 0.73" rgba="0.55 0.58 0.62 1"/>
+    <geom name="belt_head" type="cylinder" size="0.035 0.15" pos="0.25 -0.30 0.69" euler="0 90 0" rgba="0.35 0.37 0.4 1"/>
+    <geom name="belt_tail" type="cylinder" size="0.035 0.15" pos="0.25 -2.40 0.69" euler="0 90 0" rgba="0.35 0.37 0.4 1"/>
+    <geom name="belt_leg1" type="box" size="0.03 0.03 0.34" pos="0.25 -0.50 0.34" rgba="0.24 0.26 0.29 1"/>
+    <geom name="belt_leg2" type="box" size="0.03 0.03 0.34" pos="0.25 -1.35 0.34" rgba="0.24 0.26 0.29 1"/>
+    <geom name="belt_leg3" type="box" size="0.03 0.03 0.34" pos="0.25 -2.20 0.34" rgba="0.24 0.26 0.29 1"/>
+    <geom name="belt_stripe1" class="marker" type="box" size="0.13 0.01 0.001" pos="0.25 -0.60 0.721" rgba="0.3 0.32 0.36 1"/>
+    <geom name="belt_stripe2" class="marker" type="box" size="0.13 0.01 0.001" pos="0.25 -1.00 0.721" rgba="0.3 0.32 0.36 1"/>
+    <geom name="belt_stripe3" class="marker" type="box" size="0.13 0.01 0.001" pos="0.25 -1.40 0.721" rgba="0.3 0.32 0.36 1"/>
+    <geom name="belt_stripe4" class="marker" type="box" size="0.13 0.01 0.001" pos="0.25 -1.80 0.721" rgba="0.3 0.32 0.36 1"/>
+    <geom name="belt_stripe5" class="marker" type="box" size="0.13 0.01 0.001" pos="0.25 -2.20 0.721" rgba="0.3 0.32 0.36 1"/>
+
+    <!-- a small pool of boxes, recycled through the feeder for an endless supply -->
+    <body name="box0" pos="0.40 0 0.89"><freejoint name="box0_free"/><geom name="box0" type="box" size="0.06 0.09 0.06" mass="0.4" rgba="1 0.68 0 1"/></body>
+    <body name="box1" pos="3 0 0.06"><freejoint name="box1_free"/><geom name="box1" type="box" size="0.06 0.09 0.06" mass="0.4" rgba="0.3 0.6 1 1"/></body>
+    <body name="box2" pos="3.4 0 0.06"><freejoint name="box2_free"/><geom name="box2" type="box" size="0.06 0.09 0.06" mass="0.4" rgba="0.6 0.9 0.4 1"/></body>
+    <body name="box3" pos="3.8 0 0.06"><freejoint name="box3_free"/><geom name="box3" type="box" size="0.06 0.09 0.06" mass="0.4" rgba="1 0.4 0.4 1"/></body>
+    <body name="box4" pos="4.2 0 0.06"><freejoint name="box4_free"/><geom name="box4" type="box" size="0.06 0.09 0.06" mass="0.4" rgba="0.8 0.6 1 1"/></body>
+
+    <!-- crate dropped into the reach path; kinematic so the arm cannot shove it -->
+    <body name="obstacle" mocap="true" pos="3 3 0.15">
+      <geom name="obstacle" type="box" size="0.09 0.17 0.07" rgba="0.44 0.26 0.13 1"/>
+    </body>
+
+    <!-- a person walking into the cell -->
+    <body name="person" mocap="true" pos="3 -3 0.9">
+      <geom name="person_body" type="capsule" size="0.16 0.5" rgba="0.53 0 1 1"/>
+      <geom name="person_head" type="sphere" size="0.13" pos="0 0 0.75" rgba="0.95 0.75 0.65 1"/>
+    </body>
+  </worldbody>
+
+</mujoco>

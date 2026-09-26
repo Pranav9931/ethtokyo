@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0c0f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icon.svg" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <title>Robot Rescue Controller</title>
+  <link rel="stylesheet" href="/src/controller.css" />
+</head>
+<body>
+  <canvas id="view"></canvas>
+
+  <!-- 1. Connect screen -->
+  <section id="connect">
+    <div class="connect-card">
+      <div class="brand"><span class="ring"></span>Robot Rescue <small>Controller</small></div>
+      <div class="robot-card">
+        <div class="robot-avatar"></div>
+        <div><b id="robot-name">Unitree G1</b><div class="muted" id="robot-host">searching…</div><div class="muted" id="robot-state"></div></div>
+        <span id="robot-dot" class="dot"></span>
+      </div>
+      <label class="field">Pairing code from the job page
+        <div class="code-row"><input id="pair-code" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000" autocomplete="one-time-code"><button id="pair-btn">Pair</button></div>
+      </label>
+      <button id="scan-btn" class="sec">Scan pairing QR</button>
+      <div class="or">or</div>
+      <button id="solo-btn" class="sec">Use this phone on its own <small>accept a job and verify with World ID here</small></button>
+      <div class="muted small" id="connect-msg"></div>
+    </div>
+  </section>
+
+  <!-- 2. Cockpit -->
+  <section id="cockpit" hidden>
+    <header class="hud">
+      <button id="btn-menu" class="hud-btn">≡</button>
+      <div class="hud-status"><span id="hud-mode" class="mode">—</span><span id="hud-job" class="job">no job</span></div>
+      <div class="hud-tele"><span id="tele-t">t 0.0s</span><span id="tele-con">contacts 0</span><span id="tele-link" class="link">link ●</span></div>
+      <button id="btn-estop" class="estop">HOLD</button>
+    </header>
+
+    <div class="shoulders">
+      <div class="shoulder left"><button class="sh" data-limb-prev="1">L1 ◂ limb</button><button class="sh" data-page="1">L2 joints ⟳</button></div>
+      <div class="shoulder right"><button class="sh" data-page="1">R2 joints ⟳</button><button class="sh" data-limb-next="1">limb ▸ R1</button></div>
+    </div>
+
+    <div class="limb-strip" id="limb-strip"></div>
+
+    <div class="deck">
+      <div class="stick-wrap"><div class="stick" data-stick="L"><div class="knob"></div></div><div class="stick-label" id="lab-L"></div></div>
+      <div class="middle">
+        <div class="resume-note" id="resume-note"></div>
+        <button id="btn-talk" class="talk-btn" hidden>🎙 TALK<small>hold to speak</small></button>
+        <div class="mid-row"><button id="btn-select" class="pill-btn">SELECT<small>details</small></button><button id="btn-start" class="pill-btn primary">START<small>submit</small></button></div>
+      </div>
+      <div class="cluster">
+        <button class="abx y" data-kf="1"><span>Y</span><small>keyframe</small></button>
+        <button class="abx x" data-act="2"><span>X</span><small></small></button>
+        <button class="abx b" data-act="1"><span>B</span><small></small></button>
+        <button class="abx a" data-act="0"><span>A</span><small></small></button>
+      </div>
+      <div class="stick-wrap"><div class="stick" data-stick="R"><div class="knob"></div></div><div class="stick-label" id="lab-R"></div></div>
+    </div>
+
+    <div id="sheet" class="sheet" hidden>
+      <div class="sheet-head"><b id="sheet-title"></b><button id="sheet-close" class="hud-btn">×</button></div>
+      <div id="sheet-body"></div>
+    </div>
+  </section>
+
+  <div id="rotate">Rotate your phone to landscape</div>
+  <div id="toasts"></div>
+  <script type="module" src="/src/controller.js"></script>
+</body>
+</html>

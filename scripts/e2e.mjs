@@ -45,13 +45,15 @@ ws.send(JSON.stringify({ t: 'ctrl', targets: [-1.0, 0.2, 1.5] })); await wait(25
 const act = async (a) => { const x = await req(`/api/jobs/${job.id}/action`, { method: 'POST', body: JSON.stringify({ action: a }) }); return x.status; };
 log('complete before actions ->', (await req(`/api/jobs/${job.id}/complete`, { method: 'POST' })).status, '(expected 409)');
 log('actions: retract', await act('retract'), 'sweep_high', await act('sweep_high'));
-r = await (await req(`/api/jobs/${job.id}/complete`, { method: 'POST' })).json(); log('complete -> paid', r.job.reward, 'WLD', r.payment.status, '| balance', r.balance, '| robot', (await state()).robot.mode);
+r = await (await req(`/api/jobs/${job.id}/complete`, { method: 'POST' })).json(); log('complete -> state', r.job.state, '| robot', (await state()).robot.mode);
+for (let i = 0; i < 40; i++) { await wait(1000); const j = (await state()).jobs.find(x => x.id === job.id); if (j.state === 'done') { log('agent verdict:', j.review.approved ? 'approved' : 'rejected', j.review.efficiency + '%', '| paid', j.paid, 'of', j.reward, '| source', j.review.source, '|', j.review.summary.slice(0, 90)); break; } }
 
 await req('/api/scenario/person', { method: 'POST' }); while (!(await openJob())) await wait(500);
 job = await openJob(); log('hazard job:', job.title);
 r = await claimAndAct(job.id, 'verify');
 await req(`/api/jobs/${job.id}/action`, { method: 'POST', body: JSON.stringify({ action: 'retract' }) }); await req(`/api/jobs/${job.id}/action`, { method: 'POST', body: JSON.stringify({ action: 'step_back' }) }); await wait(4500);
 await req(`/api/jobs/${job.id}/action`, { method: 'POST', body: JSON.stringify({ action: 'confirm_clear' }) });
-log('complete hazard ->', (await req(`/api/jobs/${job.id}/complete`, { method: 'POST' })).status); await wait(1500);
+log('complete hazard ->', (await req(`/api/jobs/${job.id}/complete`, { method: 'POST' })).status);
+for (let i = 0; i < 40; i++) { await wait(1000); const j = (await state()).jobs.find(x => x.id === job.id); if (j.state === 'done') { log('agent verdict:', j.review.approved ? 'approved' : 'rejected', j.review.efficiency + '%', '| paid', j.paid); break; } }
 s = await state(); log('ledger (one identity, two jobs expected):', JSON.stringify(s.ledger), '| robot', s.robot.mode, 'personNear', s.robot.personNear);
 ws.close(); process.exit(0);

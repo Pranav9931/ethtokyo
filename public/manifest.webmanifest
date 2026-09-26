@@ -1,0 +1,14 @@
+{
+  "name": "Robot Rescue Controller",
+  "short_name": "RR Control",
+  "description": "Teleoperate a Unitree G1 for Robot Rescue jobs.",
+  "start_url": "/controller.html",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b0c0f",
+  "theme_color": "#0b0c0f",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
