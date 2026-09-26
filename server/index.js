@@ -159,14 +159,14 @@ app.get('/auth/callback', async (req, res) => {
     s.lastError = r.error;
     if (r.jobId) { jobs.release(r.jobId, r.error); sim.releaseToPool(); }
     broadcast({ t: 'toast', level: 'error', msg: `Verification failed: ${r.error}` });
-    return res.redirect(`/#/job/${r.jobId || ''}?auth=failed`);
+    return res.redirect(`/console.html#/job/${r.jobId || ''}?auth=failed`);
   }
   const job = jobs.activate(r.jobId, s.id, r.sub);
-  if (!job) { s.lastError = 'claim expired or was taken back'; return res.redirect(`/#/job/${r.jobId}?auth=expired`); }
+  if (!job) { s.lastError = 'claim expired or was taken back'; return res.redirect(`/console.html#/job/${r.jobId}?auth=expired`); }
   s.sub = r.sub; s.lastAuthAt = Date.now();
   sim.beginTeleop();
   broadcast({ t: 'toast', level: 'ok', msg: `Job ${job.id}: verified human ${r.sub.slice(0, 10)}… now in control.` });
-  res.redirect(`/#/job/${job.id}`);
+  res.redirect(`/console.html#/job/${job.id}`);
 });
 
 // Step 4b: the human gives up on verification => job returns to the pool, robot stays paused.

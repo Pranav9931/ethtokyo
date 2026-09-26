@@ -63,8 +63,8 @@ export async function createDb(url = process.env.DATABASE_URL) {
     enabled: true,
     async saveJob(j) {
       if (j.workerSub) await this.saveWorker(j.workerSub);
-      const spec = JSON.stringify({ steps: j.steps, acceptance: j.acceptance, agent: j.agent, context: j.context, telemetry: j.telemetry });
-      await sql`insert into jobs ${sql({ id: j.id, reason: j.reason, title: j.title, detail: j.detail, urgency: j.urgency, reward: j.reward, state: j.state, worker_nullifier: j.workerSub || null, posted_at: ts(j.postedAt), activated_at: ts(j.activatedAt), done_at: ts(j.doneAt), history: JSON.stringify(j.history), spec, review: j.review ? JSON.stringify(j.review) : null, paid: j.paid ?? null })}
+      const spec = { steps: j.steps, acceptance: j.acceptance, agent: j.agent, context: j.context, telemetry: j.telemetry };
+      await sql`insert into jobs ${sql({ id: j.id, reason: j.reason, title: j.title, detail: j.detail, urgency: j.urgency, reward: j.reward, state: j.state, worker_nullifier: j.workerSub || null, posted_at: ts(j.postedAt), activated_at: ts(j.activatedAt), done_at: ts(j.doneAt), history: j.history, spec, review: j.review || null, paid: j.paid ?? null })}
         on conflict (id) do update set state = excluded.state, worker_nullifier = excluded.worker_nullifier, activated_at = excluded.activated_at, done_at = excluded.done_at, history = excluded.history, spec = excluded.spec, review = excluded.review, paid = excluded.paid`;
     },
     async saveWorker(nullifier, payoutAddress) {
@@ -102,7 +102,7 @@ export async function createDb(url = process.env.DATABASE_URL) {
       return {
         aliases: aliases.map((a) => ({ nullifier: a.nullifier, canonical: a.canonical })),
         workers: workers.map((w) => ({ nullifier: w.nullifier, payoutAddress: w.payout_address })),
-        jobs: jobs.map((j) => ({ id: j.id, reason: j.reason, title: j.title, detail: j.detail, urgency: j.urgency, reward: Number(j.reward), state: j.state, workerSub: j.worker_nullifier, postedAt: +new Date(j.posted_at), activatedAt: j.activated_at ? +new Date(j.activated_at) : null, doneAt: j.done_at ? +new Date(j.done_at) : null, claimedBy: null, claimExpiresAt: null, history: j.history || [], ...(j.spec || {}), review: j.review || null, paid: j.paid == null ? null : Number(j.paid) })),
+        jobs: jobs.map((j) => { const J = (v) => (typeof v === 'string' ? JSON.parse(v) : v); return { id: j.id, reason: j.reason, title: j.title, detail: j.detail, urgency: j.urgency, reward: Number(j.reward), state: j.state, workerSub: j.worker_nullifier, postedAt: +new Date(j.posted_at), activatedAt: j.activated_at ? +new Date(j.activated_at) : null, doneAt: j.done_at ? +new Date(j.done_at) : null, claimedBy: null, claimExpiresAt: null, history: J(j.history) || [], ...(J(j.spec) || {}), review: J(j.review) || null, paid: j.paid == null ? null : Number(j.paid) }; }),
         payments: payments.map((p) => ({ dbId: Number(p.id), id: Number(p.id), jobId: p.job_id, sub: p.nullifier, amount: Number(p.amount), to: p.to_address, status: p.status, hash: p.tx_hash, url: p.tx_url, error: p.error, at: +new Date(p.created_at) })),
       };
     },
