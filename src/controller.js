@@ -163,6 +163,7 @@ document.addEventListener('click', async (ev) => {
     else if (b.dataset.limbNext) { ctl.limb = (ctl.limb + 1) % state.limbs.length; ctl.page = 0; buzz(); renderAll(); }
     else if (b.dataset.page) { ctl.page = (ctl.page + 1) % Math.max(1, Math.ceil(limbJoints().length / 4)); buzz(); renderAll(); }
     else if (b.dataset.limb) { ctl.limb = +b.dataset.limb; ctl.page = 0; buzz(); renderAll(); }
+    else if (b.dataset.manual) { if (!job) return; buzz(25); await api(`/api/jobs/${job.id}/action`, { method: 'POST', body: JSON.stringify({ action: b.dataset.manual }) }); }
     else if (b.dataset.act != null) { const a = state.robot?.actions?.[+b.dataset.act]; if (!a || !job) return; buzz(25); await api(`/api/jobs/${job.id}/action`, { method: 'POST', body: JSON.stringify({ action: a.id }) }); setTimeout(syncTargets, 150); }
     else if (b.dataset.kf) { if (state.robot) { ctl.kf.push(Array.from(state.robot.ctrl)); buzz(20); toast(`Keyframe ${ctl.kf.length} saved`, 'ok'); } }
     else if (b.id === 'btn-estop') { ctl.hold = !ctl.hold; b.classList.toggle('armed', ctl.hold); b.textContent = ctl.hold ? 'HELD' : 'HOLD'; buzz(40); if (ctl.hold && ws?.readyState === 1 && state.robot) { ctl.targets = state.robot.qpos.map((q, i) => Math.min(state.actuators[i].range[1], Math.max(state.actuators[i].range[0], q))); ws.send(JSON.stringify({ t: 'ctrl', targets: ctl.targets })); } }
@@ -215,6 +216,8 @@ function renderHud() {
   (r.actions || []).forEach((a, i) => { const b = document.querySelector(`.abx[data-act="${i}"]`); if (!b) return; b.querySelector('small').textContent = a.label; b.disabled = !inControl() || !a.available; b.classList.toggle('done', a.done); });
   for (let i = (r.actions || []).length; i < 3; i++) { const b = document.querySelector(`.abx[data-act="${i}"]`); if (b) { b.querySelector('small').textContent = ''; b.disabled = true; } }
   document.querySelector('.abx.y').disabled = !inControl();
+  $('#btn-pick').disabled = !inControl() || !!r.holding; $('#btn-drop').disabled = !inControl() || !r.holding;
+  if (r.macroError && r.macroError !== renderHud.lastErr) { toast(r.macroError, 'error'); } renderHud.lastErr = r.macroError;
   document.querySelectorAll('.stick').forEach((s) => s.style.opacity = inControl() ? 1 : .45);
 }
 function renderAll() {

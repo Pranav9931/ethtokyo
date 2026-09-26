@@ -123,3 +123,6 @@ button.sec small { font-weight: 400; color: var(--muted); }
 .scan-frame { position: relative; width: min(60vmin, 260px); height: min(60vmin, 260px); border: 3px solid var(--green); border-radius: 18px; box-shadow: 0 0 0 200vmax rgba(0,0,0,.45); }
 .scan-hint { position: absolute; bottom: 24px; left: 0; right: 0; text-align: center; color: #fff; font-size: 13px; text-shadow: 0 1px 4px #000; }
 #connect-msg { min-height: 18px; color: var(--amber); }
+
+.grip { font-size: 11px; letter-spacing: .06em; padding: 7px 12px; border-radius: 999px; background: rgba(255,255,255,.1); margin-bottom: 4px; }
+.grip:disabled { opacity: .3; }

@@ -230,3 +230,6 @@ body.pad-mode #panel, body.pad-mode #scenario { display: none; }
 .robot-bubble::after { content: ''; position: absolute; left: 50%; bottom: -7px; width: 12px; height: 12px; background: var(--gray-900); transform: translateX(-50%) rotate(45deg); }
 .robot-bubble.interim { opacity: .75; font-style: italic; }
 .robot-bubble::before { content: '🔊'; margin-right: 6px; }
+
+.manual-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0 8px; font-size: 12px; }
+.manual-row button { display: inline-flex; align-items: center; gap: 6px; }

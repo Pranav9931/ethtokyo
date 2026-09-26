@@ -226,6 +226,7 @@ document.addEventListener('keydown', (ev) => {
   else if (k === 'ArrowLeft' || k === 'ArrowRight') { kbNudge(k === 'ArrowRight' ? 1 : -1, ev.shiftKey); ev.preventDefault(); }
   else if (k === '0') { const sel = kbSelected(); if (sel) { targets[sel.i] = 0; dirty = true; const inp = document.querySelector(`#job-view input[type=range][data-i="${sel.i}"]`); if (inp) inp.value = 0; } }
   else if (/^[qwe]$/i.test(k)) { const btn = document.querySelectorAll('#job-view button.action')['qwe'.indexOf(k.toLowerCase())]; if (btn && !btn.disabled) btn.click(); }
+  else if (/^[po]$/i.test(k)) { const btn = document.querySelector(`#job-view button[data-action="${k.toLowerCase() === 'p' ? 'pick' : 'drop'}"]`); if (btn && !btn.disabled) btn.click(); }
   else if (k === 'Enter') { const btn = document.querySelector('#job-view button[data-complete]'); if (btn && !btn.disabled) btn.click(); }
   else if (k === ' ') { if (kf.frames.length >= 2 && !kf.playing) { kfPlay(); ev.preventDefault(); } }
   else if (k === 'Escape') { document.querySelectorAll('#job-view .joint').forEach((el) => el.classList.remove('kb-selected')); const hint = $('#kb-hint'); if (hint) kbHighlight(); }
@@ -377,7 +378,7 @@ function renderJobView() {
 
   // Only rebuild the DOM when something structural changed; otherwise a rebuild mid-drag resets the sliders.
   const r = state.robot || {};
-  const key = JSON.stringify([job.id, job.state, mine, inControl, authFailed, state.denied, wid.open, job.doneAt, r.actions, r.resume, state.me?.payoutAddress, state.me?.payments?.enabled, job.review]);
+  const key = JSON.stringify([job.id, job.state, mine, inControl, authFailed, state.denied, wid.open, job.doneAt, r.actions, r.resume, state.me?.payoutAddress, state.me?.payments?.enabled, job.review, r.manualActions, r.held, r.macroRunning, r.macroError]);
   if (key === jobViewKey) {
     const cd = view.querySelector('.countdown');
     if (cd) cd.textContent = `${Math.max(0, (job.claimExpiresAt - Date.now()) / 1000) | 0}s`;
@@ -420,6 +421,7 @@ function renderJobView() {
         ${(r.actions || []).map((a, i) => `<button class="action ${a.done ? 'done' : ''}" data-action="${a.id}" data-job="${job.id}" ${inControl && a.available ? '' : 'disabled'}>
           <span class="tick">${a.done ? '✓' : ''}</span><span><b>${esc(a.label)}</b><small>${esc(a.desc)}</small></span><kbd>${'QWE'[i] || ''}</kbd></button>`).join('')}
       </div>
+      ${inControl && (r.manualActions || []).length ? `<div class="manual-row">${r.manualActions.map((a, i) => `<button class="sec small" data-action="${a.id}" data-job="${job.id}" ${a.available ? '' : 'disabled'} title="${esc(a.desc)}">${a.id === 'pick' ? '✊' : '🖐'} ${esc(a.label)} <kbd>${['P', 'O'][i]}</kbd></button>`).join('')}${r.held ? `<span class="muted">holding the ${esc(r.held)}</span>` : ''}${r.macroRunning ? '<span class="muted"><span class="spinner"></span> moving…</span>' : ''}${r.macroError ? `<span style="color:var(--error-700)">${esc(r.macroError)}</span>` : ''}</div>` : ''}
       ${job.reason === 'hazard' ? `<button id="talk-btn" class="talk ${inControl ? '' : ''}" ${inControl && talker.supported ? '' : 'disabled'} title="Hold (or press V) to speak through the robot">🎙 Hold to talk to the person</button>` : ''}
       <details class="override" ${inControl && (r.actionsDone || []).includes('manual_nudge') ? 'open' : ''}><summary>Manual control · ${esc(state.robotName || 'robot')} <span class="muted">drag a limb in the 3D view, or use the joint sliders</span></summary>
         <div id="kb-hint" class="kb-hint"><b>Keyboard:</b> 1–5 pick a limb, then ← → to move joints · Q/W/E actions · Enter submit</div>

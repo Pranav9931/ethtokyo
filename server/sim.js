@@ -23,6 +23,12 @@ const POSES = {
   carry:    sym(-1.4, 0.2, -0.2, 1.05, 0.1, CARRY_YAW), // waist turned to the bin
   release:  sym(-1.3, 0.5, -0.2, 1.05, 0.1, CARRY_YAW), // hands open, box drops
   open_high: sym(-1.5, 0.6, 0.0, 0.9, 0.0),             // hands high and wide: first move of any retreat
+  wide_low:       sym(-1.1, 0.55, 0.2, 1.05, 0.15),     // hands spread sideways at box height: first move when backing off a crate
+  crate_approach: sym(-1.7, 0.6, 0.2, 1.35, 0.15),      // hands 48 cm apart above a crate sitting on the feeder box
+  crate_grasp:    sym(-1.6, 0.4, -0.2, 1.8, 0.15),      // hands close to 40 cm on the crate's sides
+  crate_lift:     sym(-1.6, 0.5, 0.0, 1.2, 0.0),        // crate up
+  crate_carry:    sym(-1.6, 0.5, 0.0, 1.2, 0.0, -CARRY_YAW), // waist turned left, over the free floor
+  crate_release:  sym(-1.1, 0.8, 0.0, 1.2, 0.25, -CARRY_YAW), // low over the floor, hands open, rail set down
   safe:     { left_shoulder_pitch: 0.1, right_shoulder_pitch: 0.1, left_elbow: 1.0, right_elbow: 1.0, left_shoulder_roll: 0.2, right_shoulder_roll: -0.2 }, // arms folded low at the sides
 };
 // One cycle: approach the feeder, grasp, lift, carry to the bin, release, come back. Loops forever.
@@ -44,15 +50,15 @@ const LIMBS = [
 let TARGET_HOME = [0.40, 0, 0.89];           // where the feeder presents the next box
 const BOX_PARK = [[3, 0, 0.06], [3.4, 0, 0.06], [3.8, 0, 0.06], [4.2, 0, 0.06], [4.6, 0, 0.06]];
 const BELT = { x: [0.10, 0.40], yStart: -0.15, yEnd: -2.35, top: 0.72, speed: 0.35 }; // outfeed conveyor along -y
-const OBSTACLE_PARK = [3, 3, 0.15];
-const OBSTACLE_SPOT = [0.40, 0, 1.03];       // long crate racked across the feeder, right where the hands close
+const OBSTACLE_PARK = [3, 3, 0.05];
+const OBSTACLE_SPOT = [0.40, 0, 0.975];      // fallen rack rail resting on the uprights just above the box: hands cannot get to the box
 const PERSON_PARK = [3, -3, 0.66];
 const PERSON_NEAR = [0.35, 0.55, 0.66];
 const PERSON_AWAY = [1.4, 1.6, 0.66];
 const HAZARD_RADIUS = 0.6;
 
 const STUCK = {
-  obstructed: { title: 'Arm blocked at the feeder', detail: 'Joint tracking error stayed high for 3 s. Something is in the reach path to the feeder. Back off, route the arm over it, or get it removed.', urgency: 'medium', reward: 0.075 },
+  obstructed: { title: 'Rack rail fell across the feeder', detail: 'My hands are blocked above the box: the rack rail has come down across the feeder. Back off, lift the rail off and set it aside, then continue.', urgency: 'medium', reward: 0.075 },
   hazard:     { title: 'Person inside the robot cell', detail: 'A person is within 0.6 m of a hand. The robot is holding position. Tuck the arms, get the person out, confirm the cell is clear.', urgency: 'high', reward: 0.1 },
   lowconf:    { title: 'Cannot localize the next box', detail: 'The box is not on the feeder mark (pose deviates > 15 cm). Nudge it back onto the green mark, accept its new position, or skip it.', urgency: 'low', reward: 0.05 },
 };
@@ -65,16 +71,23 @@ const ACTIONS = {
     { id: 'confirm_clear', label: 'Confirm area clear', desc: 'You checked the camera: nobody within 0.6 m. Enables resume.', needs: (sim) => !sim.personNear },
   ],
   obstructed: [
-    { id: 'retract', label: 'Back off', desc: 'Pull the arm out of contact with the crate.' },
-    { id: 'request_removal', label: 'Request removal', desc: 'Ticket to the floor crew: the crate is carried away.' },
-    { id: 'manual_clear', label: 'Work around it yourself', desc: 'Take manual control and see if the arm can get to the box past the crate.' },
+    { id: 'retract', label: 'Back off', desc: 'Lift both hands straight up off the rail.' },
+    { id: 'pick_crate', label: 'Lift the rail off', desc: 'Wide grip: both hands take the rail and lift it clear of the box.' },
+    { id: 'drop_on_belt', label: 'Set it down aside', desc: 'Carry the rail to the free floor on my left and let go; the crew collects it.', needs: (sim) => sim.held?.kind === 'crate' },
+    { id: 'request_removal', label: 'Call the floor crew', desc: 'Fallback: the crew takes the rail away for you.' },
   ],
   lowconf: [
-    { id: 'rescan', label: 'Accept new box position', desc: 'You confirmed the box is intact: the agent re-plans the grasp around where it is now.' },
+    { id: 'pick_box', label: 'Pick the box where it is', desc: 'Re-aim at the box\'s current position and run the grasp; needs it within reach.' },
     { id: 'manual_nudge', label: 'Nudge it back yourself', desc: 'Drag the robot or use the sticks to push the box onto the green mark.' },
     { id: 'skip_part', label: 'Discard this box', desc: 'Box is damaged or missing: pull it and feed the next one.' },
   ],
 };
+
+// Manual primitives offered on every job while a human is in control.
+const MANUAL = [
+  { id: 'pick', label: 'Pick', desc: 'Close the hands on whatever is between them (box or rail).' },
+  { id: 'drop', label: 'Drop', desc: 'Open the hands and let go of what is held.' },
+];
 
 export class Sim extends EventEmitter {
   static async create() {
@@ -94,10 +107,11 @@ export class Sim extends EventEmitter {
     this.ctrl = data.ctrl; this.qpos = data.qpos; this.qvel = data.qvel;
     this.geomXpos = data.geom_xpos; this.geomXmat = data.geom_xmat;
     this.mocapPos = data.mocap_pos; this.xfrc = data.xfrc_applied;
-    this.boxes = [0, 1, 2, 3, 4].map((i) => ({ body: model.body(`box${i}`).id, qadr: model.jnt_qposadr[model.jnt(`box${i}_free`).id], dadr: model.jnt_dofadr[model.jnt(`box${i}_free`).id] }));
+    this.boxes = [0, 1, 2, 3, 4].map((i) => ({ kind: 'box', i, body: model.body(`box${i}`).id, qadr: model.jnt_qposadr[model.jnt(`box${i}_free`).id], dadr: model.jnt_dofadr[model.jnt(`box${i}_free`).id] }));
+    this.crate = { kind: 'crate', body: model.body('obstacle').id, qadr: model.jnt_qposadr[model.jnt('obstacle_free').id], dadr: model.jnt_dofadr[model.jnt('obstacle_free').id] };
+    this.graspables = [...this.boxes, this.crate];
     this.current = 0; this.held = null; this.processed = 0; this.releasedAt = null;
     this.personMocap = model.body_mocapid[model.body('person').id];
-    this.obstacleMocap = model.body_mocapid[model.body('obstacle').id];
     this.rightWrist = model.body('right_wrist_yaw_link').id; this.leftWrist = model.body('left_wrist_yaw_link').id;
     this.handBodies = [this.leftWrist, this.rightWrist];
     Object.defineProperty(this, 'targetBody', { get: () => this.boxes[this.current].body });
@@ -119,7 +133,7 @@ export class Sim extends EventEmitter {
     this.teleTargets = new Float64Array(this.nu);
     this.personNear = false; this.sweepHigh = false; this.skipInspect = false; this.actionsDone = []; this.anims = [];
     this.drag = null; // { body, target:[x,y,z], limb }
-    this.macro = null;
+    this.macro = null; // queued teleop moves: [{ pose, dur } | { op: 'pick'|'drop'|'aim' }]
     this.reset();
   }
 
@@ -160,18 +174,20 @@ export class Sim extends EventEmitter {
       ctrl: Array.from(this.ctrl).map((v) => +v.toFixed(3)), personNear: this.personNear,
       targetDisplaced: this.targetDisplacement() > 0.15, ncon: this.data.ncon,
       obstacleInPath: this.obstacleInPath(), sweepHigh: this.sweepHigh, dragging: this.drag ? this.drag.body : null,
-      boxesProcessed: this.processed, shipped: this.shipped || 0, holding: this.held != null,
+      boxesProcessed: this.processed, shipped: this.shipped || 0, holding: !!this.held, held: this.held ? this.held.kind : null,
+      manualActions: this.mode === 'teleop' ? MANUAL.map((a) => ({ ...a, available: a.id === 'pick' ? !this.held : !!this.held })) : [],
       person: { pos: [0, 1, 2].map((i) => +this.mocapPos[3 * this.personMocap + i].toFixed(3)), motion: this.personMotion() },
       actions: this.stuckReason ? ACTIONS[this.stuckReason].map((a) => ({ id: a.id, label: a.label, desc: a.desc, done: this.actionsDone.includes(a.id), available: a.needs ? a.needs(this) : true })) : [],
-      actionsDone: this.actionsDone, resume: this.resumeCheck(),
+      actionsDone: this.actionsDone, resume: this.resumeCheck(), macroRunning: !!this.macro, macroError: this.macroError || null,
     };
   }
-  obstacleInPath() { const m = this.mocapPos, k = this.obstacleMocap; return Math.hypot(m[3 * k], m[3 * k + 1]) < 1.2; }
+  // the crate counts as in the way while it sits in the feeder zone (on or around the box) or is being held
+  obstacleInPath() { if (this.held?.kind === 'crate') return true; const p = this.cratePos(); return p[0] > 0.2 && p[0] < 0.65 && Math.abs(p[1]) < 0.35 && p[2] > 0.74; }
   resumeCheck() {
     switch (this.stuckReason) {
       case 'hazard': return this.personNear ? 'A person is still within 0.6 m of a hand.' : !this.actionsDone.includes('confirm_clear') ? 'Confirm the area is clear first.' : null;
-      case 'obstructed': return this.obstacleInPath() ? 'The crate is still in the reach path. Get it removed.' : null;
-      case 'lowconf': return this.targetDisplacement() > 0.15 ? 'The box is still off the feeder mark. Nudge it back, accept its new position, or discard it.' : null;
+      case 'obstructed': return this.held?.kind === 'crate' ? 'Still holding the rail: set it down first.' : this.obstacleInPath() ? 'The rail is still across the feeder. Lift it off and set it aside, or call the crew.' : null;
+      case 'lowconf': return this.held?.kind === 'box' ? null : this.held?.kind === 'crate' ? 'Drop the rail first.' : this.targetDisplacement() > 0.15 ? 'The box is still off the feeder mark. Pick it where it is, nudge it back, or discard it.' : null;
       default: return null;
     }
   }
@@ -179,10 +195,9 @@ export class Sim extends EventEmitter {
   // ---------- scenario controls ----------
   reset() {
     this.mujoco.mj_resetData(this.model, this.data);
-    TARGET_HOME = [0.40, 0, 0.89]; POSES.grasp.waist_yaw = POSES.approach.waist_yaw = POSES.lift.waist_yaw = 0;
+    TARGET_HOME = [0.40, 0, 0.89]; for (const k of ['approach', 'descend', 'grasp', 'lift']) POSES[k].waist_yaw = 0;
     this.current = 0; this.held = null; this.processed = 0; this.shipped = 0; this.releasedAt = null;
     this.boxes.forEach((b, i) => this.placeFree(b.qadr, b.dadr, i === 0 ? TARGET_HOME : BOX_PARK[i]));
-    this.setMocap(this.obstacleMocap, OBSTACLE_PARK);
     this.setPerson(PERSON_PARK);
     for (let i = 0; i < this.nu; i++) this.ctrl[i] = 0;
     this.mujoco.mj_forward(this.model, this.data);
@@ -198,38 +213,59 @@ export class Sim extends EventEmitter {
   }
   setMocap(id, pos) { for (let i = 0; i < 3; i++) this.mocapPos[3 * id + i] = pos[i]; }
   setPerson(pos) { this.setMocap(this.personMocap, pos); }
-  spawnObstacle() { this.setMocap(this.obstacleMocap, OBSTACLE_SPOT); }
-  clearObstacle() { this.setMocap(this.obstacleMocap, OBSTACLE_PARK); }
+  spawnObstacle() {
+    if (this.held?.kind === 'crate') return;
+    // drop it only while the arms are turned away at the belt, otherwise it bounces off the hands
+    const L = this.wrist(this.leftWrist), R = this.wrist(this.rightWrist), handsNearFeeder = Math.abs((L[1] + R[1]) / 2) < 0.2 && (L[0] + R[0]) / 2 > 0.15; // hands over the feeder line
+    if (this.mode === 'auto' && (handsNearFeeder || this.held)) { this.pendingObstacle = true; return; }
+    this.pendingObstacle = false; this.placeFree(this.crate.qadr, this.crate.dadr, OBSTACLE_SPOT);
+  }
+  clearObstacle() { if (this.held?.kind === 'crate') this.held = null; this.placeFree(this.crate.qadr, this.crate.dadr, OBSTACLE_PARK); }
+  cratePos() { const b = this.crate.body; return [this.data.xpos[3 * b], this.data.xpos[3 * b + 1], this.data.xpos[3 * b + 2]]; }
+  heldRec() { return !this.held ? null : this.held.kind === 'crate' ? this.crate : this.boxes[this.held.i]; }
   personEnter() { this.setPerson(PERSON_NEAR); }
   personLeaveSlowly(delay = 0) { const m = this.mocapPos, k = this.personMocap; if (Math.hypot(m[3 * k] - PERSON_AWAY[0], m[3 * k + 1] - PERSON_AWAY[1]) < 0.1) return false; this.animateMocap(this.personMocap, PERSON_AWAY, 4.5, null, delay); return true; }
   // The person heard the robot speak: after a beat they walk out. Returns true if they were still in the cell.
   personHeard() { if (!this.actionsDone.includes('speak')) this.actionsDone.push('speak'); const left = this.personLeaveSlowly(0.8); this.emit('status'); return left; }
   personMotion() { const a = this.anims.find((x) => x.id === this.personMocap); if (!a) return null; const k = Math.min(1, (this.data.time - a.t0) / a.dur); return { walking: k < 1, heading: Math.atan2(a.to[1] - a.from[1], a.to[0] - a.from[0]) }; }
   personLeave() { this.setPerson(PERSON_PARK); }
-  knockTarget() { if (this.held != null) return; const b = this.boxes[this.current]; this.placeFree(b.qadr, b.dadr, [0.55, 0.22, 0.85]); this.qvel[b.dadr] = 0.3; this.qvel[b.dadr + 1] = 1.2; }
+  knockTarget() { if (this.held) return; const b = this.boxes[this.current]; this.placeFree(b.qadr, b.dadr, [0.50, 0.16, 0.84]); this.qvel[b.dadr] = 0.2; this.qvel[b.dadr + 1] = 0.5; } // ends up ~25 cm off the mark, still on the bench
   restoreTarget() { const b = this.boxes[this.current]; this.placeFree(b.qadr, b.dadr, TARGET_HOME); }
   // feeder: bring in the next box from the pool
   feedNext() { this.current = (this.current + 1) % this.boxes.length; const b = this.boxes[this.current]; this.placeFree(b.qadr, b.dadr, [TARGET_HOME[0], TARGET_HOME[1], TARGET_HOME[2] + 0.03]); }
   boxPos(i = this.current) { const b = this.boxes[i].body; return [this.data.xpos[3 * b], this.data.xpos[3 * b + 1], this.data.xpos[3 * b + 2]]; }
   wrist(b) { const x = this.data.xpos; return [x[3 * b], x[3 * b + 1], x[3 * b + 2]]; }
   handToBox() { const p = this.boxPos(); return Math.max(...this.handBodies.map((h) => { const w = this.wrist(h); return Math.hypot(w[0] - p[0], w[1] - p[1], w[2] - p[2]); })); }
-  grab() { this.held = this.current; }
-  drop() { if (this.held == null) return; this.held = null; this.releasedAt = this.data.time; }
+  grab() { this.held = { kind: 'box', i: this.current }; }
+  drop() { if (!this.held) return; this.held = null; this.releasedAt = this.data.time; }
+  // manual pick: close on the nearest graspable between the hands (within 20 cm of the hand midpoint)
+  pick(kind = null) {
+    if (this.held) return 'already holding something';
+    const L = this.wrist(this.leftWrist), R = this.wrist(this.rightWrist), mid = [0, 1, 2].map((i) => (L[i] + R[i]) / 2);
+    const reach = kind === 'crate' ? 0.26 : 0.2;
+    let best = null;
+    for (const g of this.graspables) { if (kind && g.kind !== kind) continue; const x = this.data.xpos, b = g.body, d = Math.hypot(x[3 * b] - mid[0], x[3 * b + 1] - mid[1], x[3 * b + 2] - mid[2]); if (d < reach && (!best || d < best.d)) best = { g, d }; }
+    if (!best) return kind === 'crate' ? 'the rail is not between the hands: use manual control to get over it, or call the crew' : 'nothing between the hands to pick (get within 20 cm of a box or crate)';
+    this.held = best.g.kind === 'crate' ? { kind: 'crate' } : { kind: 'box', i: best.g.i };
+    this.emit('status'); return null;
+  }
   // outfeed conveyor: boxes resting on the belt are carried along it; past the tail they leave the frame and rejoin the pool
   conveyor() {
-    this.boxes.forEach((b, i) => {
-      if (i === this.held || i === this.current) return;
+    // a rail left on the floor away from the feeder is collected by the crew after a few seconds
+    if (this.held?.kind !== 'crate') { const p = this.cratePos(); const away = p[2] < 0.3 && p[0] < 2.5; if (away) { this.railRestSince ??= this.data.time; if (this.data.time - this.railRestSince > 6) { this.placeFree(this.crate.qadr, this.crate.dadr, OBSTACLE_PARK); this.railRestSince = null; } } else this.railRestSince = null; }
+    this.graspables.forEach((b) => {
+      if ((this.held && this.heldRec() === b) || (b.kind === 'box' && b.i === this.current)) return;
       const x = this.qpos[b.qadr], y = this.qpos[b.qadr + 1], z = this.qpos[b.qadr + 2];
-      if (x < BELT.x[0] || x > BELT.x[1] || y > BELT.yStart || z > BELT.top + 0.12) return;
-      if (y < BELT.yEnd) { this.placeFree(b.qadr, b.dadr, BOX_PARK[i]); this.shipped = (this.shipped || 0) + 1; return; }
+      if (x < BELT.x[0] || x > BELT.x[1] || y > BELT.yStart || z > BELT.top + 0.15) return;
+      if (y < BELT.yEnd) { this.placeFree(b.qadr, b.dadr, b.kind === 'crate' ? OBSTACLE_PARK : BOX_PARK[b.i]); if (b.kind === 'box') this.shipped = (this.shipped || 0) + 1; return; }
       // belt drive: hold the box's planar velocity at belt speed (the integrator moves it), keep it from spinning
       this.qvel[b.dadr] = (0.25 - x) * 2; this.qvel[b.dadr + 1] = -BELT.speed; this.qvel[b.dadr + 3] = this.qvel[b.dadr + 4] = this.qvel[b.dadr + 5] = 0;
     });
   }
   // two-handed carry: the held box sits at the midpoint between the wrists, yawed with the hand line
   carryHeld() {
-    if (this.held == null) return;
-    const L = this.wrist(this.leftWrist), R = this.wrist(this.rightWrist), b = this.boxes[this.held];
+    if (!this.held) return;
+    const L = this.wrist(this.leftWrist), R = this.wrist(this.rightWrist), b = this.heldRec();
     for (let i = 0; i < 3; i++) this.qpos[b.qadr + i] = (L[i] + R[i]) / 2;
     const yaw = Math.atan2(L[1] - R[1], L[0] - R[0]) - Math.PI / 2;
     this.qpos[b.qadr + 3] = Math.cos(yaw / 2); this.qpos[b.qadr + 4] = 0; this.qpos[b.qadr + 5] = 0; this.qpos[b.qadr + 6] = Math.sin(yaw / 2);
@@ -273,29 +309,41 @@ export class Sim extends EventEmitter {
 
   humanAction(id) {
     if (this.mode !== 'teleop') return 'robot is not under human control';
-    const def = (ACTIONS[this.stuckReason] || []).find((a) => a.id === id);
+    const def = (ACTIONS[this.stuckReason] || []).find((a) => a.id === id) || MANUAL.find((a) => a.id === id);
     if (!def) return `action ${id} is not offered for this job`;
     if (def.needs && !def.needs(this)) return 'that action is not available yet';
+    this.macroError = null;
     switch (id) {
-      case 'retract': this.releaseDrag(); this.teleTargets.set(this.poseVec('open_high')); this.macro = { pose: this.stuckReason === 'hazard' ? 'safe' : 'open_high', at: this.data.time + 1.2 }; break;
+      case 'retract': this.releaseDrag(); this.runMacro(this.stuckReason === 'obstructed'
+        ? [{ pose: 'approach', dur: 0.8 }, { pose: 'crate_approach', dur: 1.0 }]           // straight up off the crate, then wide and high
+        : [{ pose: 'open_high', dur: 1.2 }, ...(this.stuckReason === 'hazard' ? [{ pose: 'safe' }] : [])]); break;
       case 'step_back': this.personLeaveSlowly(); break;
       case 'speak': break; // marked done by the server when speech actually reaches the robot
       case 'confirm_clear': break;
-      case 'manual_clear': break;
-      case 'request_removal': this.animateMocap(this.obstacleMocap, OBSTACLE_PARK, 3.0, [OBSTACLE_SPOT[0], OBSTACLE_SPOT[1], 1.7]); break; // crane it straight up, then away
-      case 'rescan': {
-        // approach pose puts the wrist at bearing -0.48 rad with waist_yaw 0.2; re-aim the waist at the box's bearing
-        const p = this.boxPos(); TARGET_HOME = [p[0], p[1], p[2]];
-        const yaw = Math.atan2(p[1], p[0]);   // both hands close at bearing 0 with the waist straight
-        POSES.approach.waist_yaw = POSES.grasp.waist_yaw = POSES.lift.waist_yaw = Math.max(-1.2, Math.min(1.2, yaw));
-        break;
-      }
+      case 'pick_crate': this.releaseDrag(); this.runMacro([{ pose: 'crate_approach', dur: 1.4 }, { op: 'pick', kind: 'crate' }, { pose: 'crate_lift', dur: 1.0 }]); break;
+      case 'drop_on_belt': this.releaseDrag(); this.runMacro([{ pose: 'crate_lift', dur: 0.8 }, { pose: 'crate_carry', dur: 1.2 }, { pose: 'crate_release', dur: 0.6 }, { op: 'drop' }, { pose: 'crate_lift', dur: 0.8 }, { pose: 'open_high', dur: 0.8 }]); break;
+      case 'request_removal': this.clearObstacle(); break;
+      case 'pick_box': this.releaseDrag(); this.runMacro([{ op: 'aim' }, { pose: 'approach', dur: 1.0 }, { pose: 'descend', dur: 0.8 }, { pose: 'grasp', dur: 0.8 }, { op: 'pick' }, { pose: 'lift', dur: 0.8 }]); break;
       case 'manual_nudge': break;
       case 'skip_part': this.feedNext(); break;
+      case 'pick': { const err = this.pick(); if (err) return err; break; }
+      case 'drop': if (!this.held) return 'nothing is held'; this.drop(); break;
     }
     if (!this.actionsDone.includes(id)) this.actionsDone.push(id);
     this.emit('status');
     return null;
+  }
+  // sequential teleop macro: poses with dwell times and pick/drop ops, driven from advance()
+  runMacro(steps) { this.macro = { steps: [...steps], at: this.data.time }; }
+  stepMacro() {
+    const m = this.macro; if (!m || this.data.time < m.at) return;
+    const st = m.steps.shift(); if (!st) { this.macro = null; return; }
+    if (st.pose) { this.teleTargets.set(this.poseVec(st.pose)); m.at = this.data.time + (st.dur ?? 1.2); }
+    else if (st.op === 'pick') { const err = this.pick(st.kind || null); if (err) { this.macro = null; this.macroError = err; this.emit('status'); return; } m.at = this.data.time + 0.2; }
+    else if (st.op === 'drop') { this.drop(); m.at = this.data.time + 0.3; }
+    else if (st.op === 'aim') { const p = this.boxPos(); const yaw = Math.atan2(p[1], p[0]); for (const k of ['approach', 'descend', 'grasp', 'lift']) POSES[k].waist_yaw = Math.max(-1.2, Math.min(1.2, yaw)); m.at = this.data.time; }
+    if (!m.steps.length && st.pose) setTimeout(() => {}, 0);
+    this.emit('status');
   }
   animateMocap(id, to, dur, via = null, delay = 0) {
     const from = [0, 1, 2].map((i) => this.mocapPos[3 * id + i]);
@@ -306,7 +354,8 @@ export class Sim extends EventEmitter {
     if (blocker) return blocker;
     this.releaseDrag();
     this.mode = 'auto'; this.stuckReason = null; this.highErrSince = null; this.actionsDone = [];
-    this.step = this.held != null ? 4 : 0; this.stepEnteredAt = this.data.time;   // holding a box: continue from lift; else recover first
+    this.step = this.held?.kind === 'box' ? 4 : 0; this.stepEnteredAt = this.data.time;   // holding a box: continue from lift; else recover first
+    if (this.held?.kind === 'box') { TARGET_HOME = [0.40, 0, 0.89]; for (const k of ['approach', 'descend', 'grasp', 'lift']) POSES[k].waist_yaw = 0; }
     this.emit('status');
     return null;
   }
@@ -340,7 +389,7 @@ export class Sim extends EventEmitter {
     for (let i = 0; i < this.nu; i++) err = Math.max(err, Math.abs(this.qpos[this.actQadr[i]] - target[i]));
 
     // before committing to a grasp the box must be on the feeder mark
-    if ((ROUTINE[this.step] === 'approach' || ROUTINE[this.step] === 'descend') && this.held == null && this.targetDisplacement() > 0.15) return this.becomeStuck('lowconf');
+    if ((ROUTINE[this.step] === 'approach' || ROUTINE[this.step] === 'descend') && !this.held && this.targetDisplacement() > 0.15) return this.becomeStuck('lowconf');
     // blocked: large tracking error for 3 s, or a step that stalls without converging (partial contact)
     if (err > 0.25) { this.highErrSince ??= t; if (t - this.highErrSince > 3.0) return this.becomeStuck('obstructed'); }
     else this.highErrSince = null;
@@ -352,6 +401,7 @@ export class Sim extends EventEmitter {
       if (done === 'grasp') { if (this.handToBox() < GRASP_RADIUS) this.grab(); else return this.becomeStuck('lowconf'); }
       if (done === 'release') { this.drop(); this.processed++; this.feedNext(); this.emit('status'); }
       this.step = (this.step + 1) % ROUTINE.length; if (this.step === 0) this.step = 1; // 'recover' only runs when (re)starting
+      if (this.pendingObstacle && ROUTINE[this.step] === 'lift_back') this.spawnObstacle();
       this.stepEnteredAt = t; this.emit('status');
     }
   }
@@ -361,7 +411,7 @@ export class Sim extends EventEmitter {
     const dt = this.model.opt.timestep;
     let n = Math.min(Math.round(seconds / dt), 100);
     if (this.mode === 'teleop') {
-      if (this.macro && this.data.time >= this.macro.at) { this.teleTargets.set(this.poseVec(this.macro.pose)); this.macro = null; }
+      this.stepMacro();
       for (let i = 0; i < this.nu; i++) this.ctrl[i] = this.drag && this.actLimb[i] === this.drag.limb ? this.qpos[this.actQadr[i]] : this.teleTargets[i];
       if (this.drag) {
         const b = this.drag.body, x = this.data.xpos, v = this.data.cvel;
@@ -386,4 +436,4 @@ export class Sim extends EventEmitter {
   }
 }
 
-export { STUCK, ACTIONS, POSES, LIMBS, ROUTINE };
+export { STUCK, ACTIONS, MANUAL, POSES, LIMBS, ROUTINE };

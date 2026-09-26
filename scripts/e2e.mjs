@@ -44,7 +44,7 @@ log('replayed proof ->', replay.status, (await replay.json()).error);
 ws.send(JSON.stringify({ t: 'ctrl', targets: [-1.0, 0.2, 1.5] })); await wait(2500); log('teleop ctrl applied ->', JSON.stringify((await state()).robot.ctrl));
 const act = async (a) => { const x = await req(`/api/jobs/${job.id}/action`, { method: 'POST', body: JSON.stringify({ action: a }) }); return x.status; };
 log('complete before actions ->', (await req(`/api/jobs/${job.id}/complete`, { method: 'POST' })).status, '(expected 409)');
-log('actions: retract', await act('retract'), 'sweep_high', await act('sweep_high'));
+log('actions: retract', await act('retract')); await wait(3500); log('  pick_crate', await act('pick_crate')); await wait(4500); log('  drop_on_belt', await act('drop_on_belt')); await wait(8000); log('  blocker now:', (await state()).robot.resume);
 r = await (await req(`/api/jobs/${job.id}/complete`, { method: 'POST' })).json(); log('complete -> state', r.job.state, '| robot', (await state()).robot.mode);
 for (let i = 0; i < 40; i++) { await wait(1000); const j = (await state()).jobs.find(x => x.id === job.id); if (j.state === 'done') { log('agent verdict:', j.review.approved ? 'approved' : 'rejected', j.review.efficiency + '%', '| paid', j.paid, 'of', j.reward, '| source', j.review.source, '|', j.review.summary.slice(0, 90)); break; } }
 

@@ -47,9 +47,13 @@
     <body name="box3" pos="3.8 0 0.06"><freejoint name="box3_free"/><geom name="box3" type="box" size="0.06 0.09 0.06" mass="0.4" rgba="1 0.4 0.4 1"/></body>
     <body name="box4" pos="4.2 0 0.06"><freejoint name="box4_free"/><geom name="box4" type="box" size="0.06 0.09 0.06" mass="0.4" rgba="0.8 0.6 1 1"/></body>
 
-    <!-- crate dropped into the reach path; kinematic so the arm cannot shove it -->
-    <body name="obstacle" mocap="true" pos="3 3 0.15">
-      <geom name="obstacle" type="box" size="0.09 0.17 0.07" rgba="0.44 0.26 0.13 1"/>
+    <!-- light rack over the feeder: two uprights; its cross rail can fall across the feeder and block the hands -->
+    <geom name="rack_post1" type="cylinder" size="0.015 0.105" pos="0.40 -0.32 0.845" rgba="0.55 0.58 0.62 1"/>
+    <geom name="rack_post2" type="cylinder" size="0.015 0.105" pos="0.40 0.32 0.845" rgba="0.55 0.58 0.62 1"/>
+    <!-- the fallen rail: a real object the robot can lift off and carry to the belt -->
+    <body name="obstacle" pos="3 3 0.05">
+      <freejoint name="obstacle_free"/>
+      <geom name="obstacle" type="box" size="0.04 0.36 0.02" mass="2.5" rgba="0.62 0.35 0.15 1"/>
     </body>
 
     <!-- a person walking into the cell -->
