@@ -9,7 +9,7 @@ const state = { me: null, robot: null, jobs: [], log: [], ledger: [], actuators:
 
 // ---------- helpers ----------
 async function api(path, opts = {}) {
-  const r = await fetch(path, { headers: { 'content-type': 'application/json' }, ...opts });
+  const r = await fetch(path, { ...opts, headers: { 'content-type': 'application/json', 'ngrok-skip-browser-warning': '1', ...(opts.headers || {}) } });
   const body = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(body.error || r.statusText), { body });
   return body;

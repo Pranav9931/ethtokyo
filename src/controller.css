@@ -116,3 +116,10 @@ button.sec small { font-weight: 400; color: var(--muted); }
 .robot-bubble::after { content: ''; position: absolute; left: 50%; bottom: -7px; width: 12px; height: 12px; background: rgba(255,255,255,.95); transform: translateX(-50%) rotate(45deg); }
 .robot-bubble.interim { opacity: .75; font-style: italic; }
 .robot-bubble::before { content: '🔊'; margin-right: 6px; }
+
+/* QR scanner */
+.scan-overlay { position: absolute; inset: 0; z-index: 50; background: #000; display: grid; place-items: center; }
+.scan-overlay video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.scan-frame { position: relative; width: min(60vmin, 260px); height: min(60vmin, 260px); border: 3px solid var(--green); border-radius: 18px; box-shadow: 0 0 0 200vmax rgba(0,0,0,.45); }
+.scan-hint { position: absolute; bottom: 24px; left: 0; right: 0; text-align: center; color: #fff; font-size: 13px; text-shadow: 0 1px 4px #000; }
+#connect-msg { min-height: 18px; color: var(--amber); }

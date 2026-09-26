@@ -9,7 +9,13 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const buzz = (ms = 12) => { try { navigator.vibrate?.(ms); } catch {} };
 function toast(msg, level = 'info') { const el = document.createElement('div'); el.className = `toast ${level}`; el.textContent = msg; $('#toasts').appendChild(el); setTimeout(() => el.remove(), 5000); }
-async function api(path, opts = {}) { const r = await fetch(path, { headers: { 'content-type': 'application/json' }, ...opts }); const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(b.error || r.statusText); return b; }
+// 'ngrok-skip-browser-warning' keeps ngrok's interstitial page out of API responses (it would otherwise come back as HTML).
+async function api(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { 'content-type': 'application/json', 'ngrok-skip-browser-warning': '1', ...(opts.headers || {}) } });
+  const text = await r.text(); let b = {};
+  try { b = JSON.parse(text); } catch { throw new Error(r.ok ? 'unexpected response from the robot server (not JSON): is the tunnel showing a warning page?' : `${r.status} ${r.statusText}`); }
+  if (!r.ok) throw new Error(b.error || r.statusText); return b;
+}
 
 const viewer = createViewer($('#view'));
 // Always landscape: when the phone is upright, rotate the whole app with CSS and render the 3D view at swapped dimensions.
@@ -36,26 +42,43 @@ async function probeRobot() {
     $('#robot-state').textContent = `${r.robot.mode}${r.job ? ' · job: ' + r.job.title : ''}`;
   } catch { $('#robot-host').textContent = 'robot unreachable'; $('#robot-dot').classList.remove('on'); }
 }
+let pairing = false;
 async function pair(code) {
+  code = String(code || '').replace(/\D/g, '');
+  if (code.length !== 6) { const m = 'Enter the 6-digit code shown on the job page ("📱 Pair phone" after you accept a job).'; $('#connect-msg').textContent = m; toast(m, 'warn'); buzz(40); return; }
+  if (pairing) return; pairing = true; $('#pair-btn').disabled = true; $('#pair-btn').textContent = '…';
   try { const r = await api('/api/pair/redeem', { method: 'POST', body: JSON.stringify({ code }) }); buzz(30); toast(`Paired to job ${r.jobId}`, 'ok'); await enterCockpit(r.jobId); }
-  catch (e) { $('#connect-msg').textContent = e.message; buzz(60); }
+  catch (e) { const m = /invalid or expired/.test(e.message) ? 'That code is invalid, already used, or older than 5 minutes. Press "📱 Pair phone" on the job page again for a fresh one.' : e.message; $('#connect-msg').textContent = m; toast(m, 'error'); buzz(60); }
+  finally { pairing = false; $('#pair-btn').disabled = false; $('#pair-btn').textContent = 'Pair'; }
 }
 $('#pair-btn').onclick = () => pair($('#pair-code').value);
-$('#pair-code').addEventListener('input', (ev) => { if (ev.target.value.replace(/\D/g, '').length === 6) pair(ev.target.value); });
+$('#pair-code').addEventListener('input', (ev) => { const v = ev.target.value.replace(/\D/g, ''); if (v.length === 6) pair(v); });
+$('#pair-code').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') pair(ev.target.value); });
 $('#solo-btn').onclick = () => enterCockpit(null);
 $('#scan-btn').onclick = async () => {
-  if (!('BarcodeDetector' in window)) return ($('#connect-msg').textContent = 'QR scanning is not supported in this browser: type the code instead.');
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    const video = Object.assign(document.createElement('video'), { srcObject: stream, playsInline: true, muted: true });
-    Object.assign(video.style, { position: 'fixed', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 50 });
-    document.body.appendChild(video); await video.play();
-    const det = new BarcodeDetector({ formats: ['qr_code'] });
-    const stop = () => { stream.getTracks().forEach((t) => t.stop()); video.remove(); };
-    video.onclick = stop;
-    const tick = async () => { if (!video.isConnected) return; try { const codes = await det.detect(video); const m = codes[0]?.rawValue?.match(/pair=(\d{6})/); if (m) { stop(); return pair(m[1]); } } catch {} setTimeout(tick, 250); };
-    tick();
-  } catch (e) { $('#connect-msg').textContent = 'Camera unavailable: ' + e.message; }
+  if (!navigator.mediaDevices?.getUserMedia) { const m = location.protocol === 'https:' || location.hostname === 'localhost' ? 'This browser cannot open the camera: type the code instead.' : 'The camera needs an https address (open the tunnel URL, not the plain IP), or type the code instead.'; $('#connect-msg').textContent = m; toast(m, 'warn'); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); }
+  catch (e) { const m = 'Camera unavailable (' + e.message + '). Type the code instead.'; $('#connect-msg').textContent = m; toast(m, 'error'); return; }
+  const video = Object.assign(document.createElement('video'), { srcObject: stream, playsInline: true, muted: true, autoplay: true });
+  const overlay = document.createElement('div'); overlay.className = 'scan-overlay'; overlay.innerHTML = '<div class="scan-frame"></div><div class="scan-hint">Point at the pairing QR on the job page · tap to cancel</div>';
+  overlay.prepend(video); $('#app').appendChild(overlay); await video.play().catch(() => {});
+  const stop = () => { stream.getTracks().forEach((t) => t.stop()); overlay.remove(); };
+  overlay.onclick = stop;
+  // BarcodeDetector where available (Android Chrome); otherwise decode frames with jsQR (iOS Safari, desktop)
+  const det = 'BarcodeDetector' in window ? new BarcodeDetector({ formats: ['qr_code'] }) : null;
+  const jsQR = det ? null : (await import('jsqr')).default;
+  const cv = document.createElement('canvas'), ctx = cv.getContext('2d', { willReadFrequently: true });
+  const found = (raw) => { const m = String(raw || '').match(/pair=(\d{6})/) || String(raw || '').match(/^(\d{6})$/); if (m) { stop(); buzz(30); pair(m[1]); return true; } return false; };
+  const tick = async () => {
+    if (!overlay.isConnected) return;
+    try {
+      if (det) { const codes = await det.detect(video); if (codes[0] && found(codes[0].rawValue)) return; }
+      else if (video.videoWidth) { cv.width = video.videoWidth; cv.height = video.videoHeight; ctx.drawImage(video, 0, 0); const img = ctx.getImageData(0, 0, cv.width, cv.height); const q = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' }); if (q && found(q.data)) return; }
+    } catch {}
+    setTimeout(tick, det ? 200 : 120);
+  };
+  tick();
 };
 const urlPair = new URLSearchParams(location.search).get('pair');
 probeRobot();
