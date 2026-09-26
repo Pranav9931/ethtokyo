@@ -30,7 +30,8 @@ const ROUTINE = ['recover', 'approach', 'descend', 'grasp', 'lift', 'carry', 're
 const DWELL = { recover: 0.3, approach: 0.4, descend: 0.4, grasp: 0.5, lift: 0.4, carry: 0.6, release: 0.5, lift_back: 0.3 };
 POSES.recover = sym(-1.5, 0.6, 0.0, 0.9, 0.0); // same as open_high: hands high and wide, clear of the feeder
 POSES.lift_back = sym(-1.5, 0.5, -0.2, 1.05, 0.1, CARRY_YAW); // hands up and open before swinging back
-const GRASP_RADIUS = 0.22;               // each wrist must be this close to the box centre to close on it
+const GRASP_RADIUS = 0.22;
+const STEP_TIMEOUT = 4.0;                // s; every routine step normally completes in about a second               // each wrist must be this close to the box centre to close on it
 
 const LIMBS = [
   { key: 'left_leg',  label: 'Left leg',   prefixes: ['left_hip_', 'left_knee', 'left_ankle_'] },
@@ -340,8 +341,10 @@ export class Sim extends EventEmitter {
 
     // before committing to a grasp the box must be on the feeder mark
     if ((ROUTINE[this.step] === 'approach' || ROUTINE[this.step] === 'descend') && this.held == null && this.targetDisplacement() > 0.15) return this.becomeStuck('lowconf');
+    // blocked: large tracking error for 3 s, or a step that stalls without converging (partial contact)
     if (err > 0.25) { this.highErrSince ??= t; if (t - this.highErrSince > 3.0) return this.becomeStuck('obstructed'); }
     else this.highErrSince = null;
+    if (t - this.stepEnteredAt > STEP_TIMEOUT) return this.becomeStuck('obstructed');
 
     const dwell = DWELL[ROUTINE[this.step]] ?? 0.6;
     if (err < 0.12 && t - this.stepEnteredAt > dwell) {
