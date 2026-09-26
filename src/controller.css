@@ -6,6 +6,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px/1.4 var(--font); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; overscroll-behavior: none; }
 #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 button { font: inherit; color: var(--fg); background: rgba(255,255,255,.08); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font-weight: 600; }
@@ -92,7 +93,17 @@ button.sec small { font-weight: 400; color: var(--muted); }
 .toast { background: #1c2029; color: #fff; padding: 8px 14px; border-radius: 10px; font-size: 13px; border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0,0,0,.5); }
 .toast.ok { border-color: var(--green); } .toast.error { border-color: var(--red); } .toast.warn { border-color: var(--amber); }
 .qr { width: 160px; height: 160px; background: #fff; border-radius: 12px; padding: 8px; }
-@media (max-height: 420px) { .stick { width: 112px; height: 112px; } .knob { width: 50px; height: 50px; margin: -25px 0 0 -25px; } .cluster { width: 132px; height: 132px; } .abx { width: 54px; height: 54px; } .abx.y { left: 39px; } .abx.x { top: 39px; } .abx.b { left: 78px; top: 39px; } .abx.a { left: 39px; top: 78px; } .limb-strip { display: none; } }
+@media (max-height: 460px) {
+  #cockpit { gap: 4px; grid-template-rows: auto auto 1fr; }
+  .hud { padding: 4px 6px; } .hud-btn { width: 32px; height: 32px; } .estop { padding: 7px 12px; }
+  .shoulders { position: absolute; left: 10px; right: 10px; top: 52px; pointer-events: none; } .shoulder { pointer-events: auto; }
+  .limb-strip { display: none; }
+  .deck { align-items: end; padding-bottom: 4px; }
+  .stick { width: 108px; height: 108px; } .knob { width: 48px; height: 48px; margin: -24px 0 0 -24px; }
+  .cluster { width: 128px; height: 128px; } .abx { width: 52px; height: 52px; font-size: 15px; } .abx.y { left: 38px; } .abx.x { top: 38px; } .abx.b { left: 76px; top: 38px; } .abx.a { left: 38px; top: 76px; }
+  .stick-label { min-height: 0; font-size: 10px; } .resume-note { font-size: 10px; }
+  .talk-btn { padding: 7px 16px; } .pill-btn { padding: 6px 14px; }
+}
 
 .talk-btn { border-radius: 999px; padding: 10px 22px; font-size: 13px; letter-spacing: .08em; display: flex; flex-direction: column; align-items: center; line-height: 1.1; background: rgba(255,255,255,.12); touch-action: none; }
 .talk-btn small { font-size: 9px; letter-spacing: 0; color: var(--muted); font-weight: 500; }
