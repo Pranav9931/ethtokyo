@@ -2,7 +2,6 @@
 // robot from a cockpit: dual sticks over four joints of the selected limb, shoulder buttons to switch limbs and
 // joint pages, A/B/X for the job's actions, Y keyframe, HOLD to freeze, START to submit.
 import QRCode from 'qrcode';
-import { createViewer } from './viewer.js';
 import { createTalker, createSpeaker, createBubble } from './voice.js';
 
 const $ = (s) => document.querySelector(s);
@@ -17,7 +16,7 @@ async function api(path, opts = {}) {
   if (!r.ok) throw new Error(b.error || r.statusText); return b;
 }
 
-const viewer = createViewer($('#view'));
+// The phone shows controls only: no 3D render (it stole the screen and the battery). The console has the render.
 // Always landscape: when the phone is upright, rotate the whole app with CSS and render the 3D view at swapped dimensions.
 const portraitQ = matchMedia('(orientation: portrait)');
 function applyOrientation() {
@@ -28,7 +27,6 @@ function applyOrientation() {
   // only the cockpit is forced into landscape; the connect screen stays in the phone's natural orientation
   const upright = vh > vw && document.body.classList.contains('cockpit');
   document.body.classList.toggle('force-landscape', upright);
-  viewer.setSize(upright ? vh : vw, upright ? vw : vh);
 }
 portraitQ.addEventListener?.('change', applyOrientation); addEventListener('resize', applyOrientation); window.visualViewport?.addEventListener('resize', applyOrientation); addEventListener('orientationchange', () => setTimeout(applyOrientation, 150)); applyOrientation();
 const state = { me: null, robot: null, jobs: [], actuators: [], limbs: [], job: null, linked: false };
@@ -101,8 +99,8 @@ function connect() {
   ws.onclose = () => { state.linked = false; $('#tele-link').classList.add('off'); setTimeout(connect, 1000); };
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
-    if (m.t === 'init') { viewer.setGeoms(m); state.actuators = m.actuators; state.limbs = m.limbs || []; Object.assign(state, { robot: m.robot, jobs: m.jobs }); renderAll(); }
-    else if (m.t === 'state') { viewer.setPoses(m.poses); viewer.setPerson(m.robot.person); state.robot = m.robot; renderHud(); }
+    if (m.t === 'init') { state.actuators = m.actuators; state.limbs = m.limbs || []; Object.assign(state, { robot: m.robot, jobs: m.jobs }); renderAll(); }
+    else if (m.t === 'state') { state.robot = m.robot; renderHud(); }
     else if (m.t === 'robot_voice') { if (m.kind === 'transcript') bubble.show(m.text, m.final); else if (!talker.active) speaker.handle(m); }
     else if (m.t === 'robot') { state.robot = m.robot; renderAll(); }
     else if (m.t === 'jobs') { state.jobs = m.jobs; api('/api/me').then((me) => { state.me = me; renderAll(); }); }
@@ -133,7 +131,8 @@ function loop(now) {
 function syncTargets() { if (state.robot) ctl.targets = Array.from(state.robot.ctrl); ctl.dirty = false; }
 
 // ---------- voice (push-to-talk on the TALK button) ----------
-const bubble = createBubble($('#app'), () => viewer.projectHead());
+// robot speech bubble: pinned under the HUD in the middle of the screen, since there is no robot head to anchor to
+const bubble = createBubble($('#app'), () => { const a = $('#app'); return { x: a.clientWidth / 2, y: 118 }; });
 const speaker = createSpeaker({ onTranscript: (t, f) => bubble.show(t, f) });
 const talker = createTalker({
   send: (m) => { if (ws?.readyState === 1) ws.send(JSON.stringify(m)); },
@@ -171,7 +170,7 @@ document.addEventListener('click', async (ev) => {
     else if (b.id === 'btn-select' || b.id === 'btn-menu') openSheet();
     else if (b.id === 'sheet-close') $('#sheet').hidden = true;
     else if (b.dataset.claim) { const c = await api(`/api/jobs/${b.dataset.claim}/claim`, { method: 'POST' }); $('#sheet').hidden = true; await verifyOnPhone(c); }
-    else if (b.dataset.cancel) { await api(`/api/jobs/${b.dataset.cancel}/cancel`, { method: 'POST' }); $('#sheet').hidden = true; }
+    else if (b.dataset.cancel) { await api(`/api/jobs/${b.dataset.cancel}/cancel`, { method: 'POST' }); $('#sheet').hidden = true; toast('Job cancelled and returned to the pool.', 'warn'); buzz(30); }
     else if (b.dataset.exit) { document.body.classList.remove('cockpit'); location.href = '/controller.html'; }
   } catch (e) { toast(e.message, 'error'); buzz(60); }
 });
@@ -239,6 +238,7 @@ function openSheet() {
     <div class="row">
       ${job.state === 'open' ? `<button class="wid" data-claim="${job.id}">Accept · Verify with World ID</button>` : ''}
       ${job.state === 'claimed' && mine ? `<button data-cancel="${job.id}">Cancel claim</button>` : ''}
+      ${job.state === 'active' && mine ? `<button data-cancel="${job.id}">Cancel job<small>back to the pool, robot stays paused</small></button>` : ''}
       <button data-exit="1">Disconnect</button>
     </div>`;
 }

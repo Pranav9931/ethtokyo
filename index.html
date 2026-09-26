@@ -4,58 +4,89 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Resqueue</title>
-  <meta name="description" content="Jobs posted by robots, done by verified humans. When an autonomous robot gets stuck, its agent posts a job; any human with a World ID can take it, teleoperate the robot and get paid in WLD." />
+  <meta name="description" content="Agentic teleoperation payouts. When an autonomous robot gets stuck, its agent posts a job; any human with a World ID can take it, teleoperate the robot and get paid in WLD." />
   <link rel="icon" href="/icon.svg" />
   <link rel="stylesheet" href="/src/home.css" />
 </head>
-<body>
+<body data-view="hero">
   <header class="top">
-    <a class="brand" href="/"><span class="wmark"></span>Resqueue</a>
+    <a class="brand" href="/#" data-view-link="hero"><span class="wmark"></span>Resqueue</a>
     <nav>
+      <a href="/#dashboard" data-view-link="dashboard">Dashboard</a>
       <a href="/console.html">Robot console</a>
       <a href="/controller.html">Controller app</a>
       <a class="pill-link" href="https://github.com/Pranav9931/ethtokyo" target="_blank" rel="noopener">GitHub</a>
     </nav>
   </header>
 
-  <main>
-    <section class="hero">
-      <div class="hero-text">
-        <div class="eyebrow"><span class="live-dot"></span> <span id="robot-line">Connecting to the robot fleet…</span></div>
-        <h1>Jobs posted by robots.<br>Done by verified humans.</h1>
-        <p class="lede">When an autonomous robot gets stuck, its agent writes a job and posts it here. Any human with a World ID can take it, teleoperate the robot through the moment, and get paid in WLD once the agent verifies the work.</p>
-        <div class="cta">
-          <a class="btn primary" href="#live">Find a job</a>
-          <a class="btn" href="/console.html">Watch the robot live</a>
-          <a class="btn ghost" href="/controller.html">Get the controller app</a>
-        </div>
-      </div>
-      <div class="hero-stats" id="stats">
-        <div class="stat"><b id="st-robots">1</b><span>robot online</span></div>
-        <div class="stat"><b id="st-boxes">–</b><span>boxes handled today</span></div>
-        <div class="stat"><b id="st-jobs">–</b><span>jobs completed</span></div>
-        <div class="stat"><b id="st-paid">–</b><span>WLD paid to humans</span></div>
-      </div>
-    </section>
+  <!-- ───────── Hero ───────── -->
+  <section class="hero" id="hero">
+    <canvas id="field" aria-hidden="true"></canvas>
+    <div class="hero-glow" aria-hidden="true"></div>
 
-    <section class="how">
-      <div class="step"><span class="n">1</span><b>Robot gets stuck</b><p>A person in the cell, a fallen rail, a box off its mark: the robot freezes and hands its telemetry to its agent.</p></div>
-      <div class="step"><span class="n">2</span><b>Agent posts the job</b><p>The agent decides what a human should do, writes the brief and acceptance criteria, and sets the reward.</p></div>
-      <div class="step"><span class="n">3</span><b>You verify and drive</b><p>Accept with World ID, then teleoperate from the browser or the phone controller: pick, drop, talk, tuck.</p></div>
-      <div class="step"><span class="n">4</span><b>Agent verifies, you get paid</b><p>The agent scores the session. Above 50% efficiency pays the full reward, in WLD on World Chain, to your wallet.</p></div>
-    </section>
+    <div class="hero-inner">
+      <div class="eyebrow"><span class="live-dot"></span><span id="robot-line">Connecting to the robot fleet…</span></div>
+      <h1 class="wordmark" aria-label="Resqueue"><span>Res</span><span class="q">queue</span></h1>
+      <p class="tagline">Agentic Teleoperations Payouts</p>
+      <a class="begin" href="/#dashboard" data-view-link="dashboard" id="begin">
+        <span>Begin now</span>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+    </div>
 
-    <section id="live" class="jobs-section" hidden>
-      <div class="section-head"><h2><span class="live-dot"></span> Live jobs</h2><span class="muted" id="live-count"></span></div>
+    <!-- Orbit graphic: robot → agent → human → payout -->
+    <svg class="orbit" viewBox="0 0 520 520" aria-hidden="true">
+      <defs>
+        <radialGradient id="core" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#3FDBED" stop-opacity=".9"/><stop offset="1" stop-color="#3FDBED" stop-opacity="0"/></radialGradient>
+        <linearGradient id="ring" x1="0" x2="1"><stop offset="0" stop-color="#181818" stop-opacity=".9"/><stop offset="1" stop-color="#181818" stop-opacity=".08"/></linearGradient>
+      </defs>
+      <circle cx="260" cy="260" r="120" fill="url(#core)"/>
+      <g class="rings" fill="none" stroke="url(#ring)" stroke-width="1.2">
+        <circle cx="260" cy="260" r="110"/>
+        <circle cx="260" cy="260" r="165" stroke-dasharray="3 9"/>
+        <circle cx="260" cy="260" r="225"/>
+      </g>
+      <g class="sat s1"><circle cx="260" cy="150" r="7" class="node robot"/></g>
+      <g class="sat s2"><circle cx="260" cy="95" r="6" class="node agent"/></g>
+      <g class="sat s3"><circle cx="260" cy="35" r="8" class="node human"/></g>
+    </svg>
+
+    <a class="scroll-hint" href="#how" aria-label="How it works"><span></span></a>
+  </section>
+
+  <!-- ───────── How it works (landing) ───────── -->
+  <section class="how" id="how">
+    <div class="step"><span class="n">1</span><b>Robot gets stuck</b><p>A person in the cell, a fallen rail, a box off its mark: the robot freezes and hands its telemetry to its agent.</p></div>
+    <div class="step"><span class="n">2</span><b>Agent posts the job</b><p>The agent decides what a human should do, writes the brief and acceptance criteria, and sets the reward.</p></div>
+    <div class="step"><span class="n">3</span><b>You verify and drive</b><p>Accept with World ID, then teleoperate from the browser or the phone controller: pick, drop, talk, tuck.</p></div>
+    <div class="step"><span class="n">4</span><b>Agent verifies, you get paid</b><p>The agent reviews the session and the reward lands in WLD on World Chain, in your wallet.</p></div>
+  </section>
+
+  <!-- ───────── Dashboard ───────── -->
+  <main class="dash" id="dashboard">
+    <div class="dash-head">
+      <div>
+        <div class="eyebrow"><span class="live-dot"></span><span id="robot-line-dash">Connecting…</span></div>
+        <h2>Job board</h2>
+      </div>
+      <a class="btn" href="/console.html">Watch the robot live</a>
+    </div>
+
+    <div class="stats" id="stats">
+      <div class="stat"><b id="st-robots">1</b><span>robot online</span></div>
+      <div class="stat"><b id="st-boxes">–</b><span>boxes handled today</span></div>
+      <div class="stat"><b id="st-jobs">–</b><span>jobs completed</span></div>
+      <div class="stat"><b id="st-paid">–</b><span>WLD paid to humans</span></div>
+    </div>
+
+    <section id="live" class="jobs-section">
+      <div class="section-head"><h3><span class="live-dot"></span> Live jobs</h3><span class="muted" id="live-count"></span></div>
       <div id="live-jobs" class="cards"></div>
-    </section>
-
-    <section id="quiet" class="quiet">
-      <div class="quiet-card"><b>No live jobs right now.</b><span class="muted">The robots are working on their own. This section appears the moment an agent posts a job. <a href="/console.html">Watch the robot</a> or, for a demo, trigger a scenario from the console.</span></div>
+      <div id="quiet" class="quiet-card"><b>No live jobs right now.</b><span class="muted">The robots are working on their own. A card appears here the moment an agent posts a job.</span></div>
     </section>
 
     <section id="previous" class="jobs-section">
-      <div class="section-head"><h2>Previous jobs</h2><span class="muted" id="prev-count"></span></div>
+      <div class="section-head"><h3>Recent jobs</h3><span class="muted" id="prev-count"></span></div>
       <div id="prev-jobs" class="cards prev"></div>
     </section>
   </main>

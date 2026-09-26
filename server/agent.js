@@ -24,7 +24,7 @@ const JobSpec = z.object({
 const Verdict = z.object({
   approved: z.boolean().describe('Whether the job was completed properly'),
   efficiency: z.number().int().min(0).max(100).describe('0-100 quality/efficiency score'),
-  payout_fraction: z.number().min(0).max(1).describe('Fraction of the reward to pay: 1 whenever the job is approved with efficiency above 50, 0 when not approved; only a low-efficiency approval (50 or below) pays a partial amount, efficiency/100'),
+  payout_fraction: z.number().min(0).max(1).describe('Fraction of the reward to pay: always 1 when the job is approved (a finished job pays the full reward), 0 when not approved'),
   summary: z.string().max(300).describe('Two sentences for the operator: what was done well, what cost points'),
 });
 
@@ -37,12 +37,13 @@ Workers are anonymous humans verified with World ID; rewards are paid in WLD tok
 // and posts its decisions back; 'claude' = call the Claude API directly; 'rules' = built-in fallback.
 export const AGENT_MODE = process.env.AGENT_MODE || (process.env.ANTHROPIC_API_KEY ? 'claude' : 'rules');
 export const EXTERNAL_TIMEOUT_MS = +(process.env.AGENT_EXTERNAL_TIMEOUT_MS || 180_000);
+// Reviews gate the payout, so they fall back fast: a finished job must be paid within seconds, not minutes.
+export const REVIEW_TIMEOUT_MS = Math.min(15_000, +(process.env.AGENT_REVIEW_TIMEOUT_MS || 15_000));
 
-// Payout policy: an approved job above 50% efficiency earns the full reward. At or below 50% it earns the
-// efficiency share; a rejected job earns nothing. Applied to every verdict, whichever agent produced it.
-export function payoutFraction({ approved, efficiency }) {
-  if (!approved) return 0;
-  return efficiency > 50 ? 1 : Math.max(0, Math.min(1, efficiency / 100));
+// Payout policy: a finished job pays the full reward, whatever the efficiency score. Efficiency only shapes the
+// score and summary. A rejected job (resume condition not met) earns nothing. Applied to every verdict, whichever agent produced it.
+export function payoutFraction({ approved }) {
+  return approved ? 1 : 0;
 }
 
 export function createAgent({ apiKey = process.env.ANTHROPIC_API_KEY, mode = AGENT_MODE } = {}) {
@@ -55,7 +56,7 @@ export function createAgent({ apiKey = process.env.ANTHROPIC_API_KEY, mode = AGE
     const id = `${type}-${++external.seq}-${Date.now().toString(36)}`;
     return new Promise((resolve) => {
       const task = { id, type, payload, createdAt: Date.now(), resolve: (r) => { external.tasks.delete(id); clearTimeout(task.timer); resolve(r); } };
-      task.timer = setTimeout(() => { console.warn(`[agent] external agent did not answer ${id} in time; using fallback`); task.resolve(fallback()); }, EXTERNAL_TIMEOUT_MS);
+      task.timer = setTimeout(() => { console.warn(`[agent] external agent did not answer ${id} in time; using fallback`); task.resolve(fallback()); }, type === 'review' ? REVIEW_TIMEOUT_MS : EXTERNAL_TIMEOUT_MS);
       external.tasks.set(id, task);
     });
   }
@@ -121,9 +122,10 @@ Reward must be between ${REWARD_RANGE.min} and ${REWARD_RANGE.max} WLD. Expected
   // ---- 2. The human says they are done: verify and score.
   async function reviewJob(job, telemetry) {
     const fallback = () => {
+      // The job counts as done when the robot can resume: it is approved and paid in full. Efficiency is only a score.
       const ok = !telemetry.resume_blocker;
       const eff = ok ? Math.max(40, 100 - 5 * telemetry.premature_complete_attempts - Math.max(0, Math.round((telemetry.seconds_in_control - 60) / 10))) : 0;
-      const v = { approved: ok, efficiency: eff, summary: ok ? 'Rule-based review: resume condition met.' : 'Rule-based review: resume condition not met.', source: 'fallback' };
+      const v = { approved: ok, efficiency: eff, summary: ok ? 'Rule-based review: resume condition met, full reward paid.' : 'Rule-based review: resume condition not met.', source: 'fallback' };
       return { ...v, payout_fraction: payoutFraction(v) };
     };
     const user = `Review this completed teleoperation job and score it.
@@ -135,7 +137,7 @@ ${JSON.stringify(telemetry, null, 1)}
 
 Scoring guidance: approve if the acceptance criteria are met and the robot can safely resume. Efficiency rewards doing the right actions
 in a sensible order without unnecessary manual flailing, finishing in reasonable time, and not attempting to resume before it was safe.
-payout_fraction is 0 when not approved; when approved with efficiency above 50 it is exactly 1 (the full reward is paid); an approved job at 50 or below pays efficiency/100.`;
+payout_fraction is 0 when not approved and exactly 1 when approved: a finished job always pays the full reward, efficiency only affects the score.`;
     if (mode === 'external') return enqueue('review', { instructions: user, job: { id: job.id, title: job.title, brief: job.detail, steps: job.steps, acceptance: job.acceptance, reward_wld: job.reward }, telemetry, schema: 'Verdict' }, fallback);
     const v = await callParsed(Verdict, user, { effort: 'low', timeoutMs: 25_000 });
     if (!v) return fallback();

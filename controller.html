@@ -15,8 +15,6 @@
 </head>
 <body>
 <div id="app">
-  <canvas id="view"></canvas>
-
   <!-- 1. Connect screen -->
   <section id="connect">
     <div class="connect-card">
@@ -47,10 +45,9 @@
 
     <div class="shoulders">
       <div class="shoulder left"><button class="sh" data-limb-prev="1">L1 ◂ limb</button><button class="sh" data-page="1">L2 joints ⟳</button></div>
+      <div class="limb-strip" id="limb-strip"></div>
       <div class="shoulder right"><button class="sh" data-page="1">R2 joints ⟳</button><button class="sh" data-limb-next="1">limb ▸ R1</button></div>
     </div>
-
-    <div class="limb-strip" id="limb-strip"></div>
 
     <div class="deck">
       <div class="stick-wrap"><button class="grip" id="btn-pick" data-manual="pick">✊ PICK</button><div class="stick" data-stick="L"><div class="knob"></div></div><div class="stick-label" id="lab-L"></div></div>

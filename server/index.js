@@ -208,7 +208,7 @@ app.post('/api/jobs/:id/complete', async (req, res) => {
     resume_blocker: finalStatus.resume,
   };
   const review = await agent.reviewJob(job, telemetry);
-  const paid = review.approved ? +(job.reward * review.payout_fraction).toFixed(4) : 0;
+  const paid = review.approved ? +job.reward : 0; // a finished job pays the full reward, whatever the score
   jobs.finish(job.id, review, paid);
   if (paid > 0) {
     const payment = ledger.pay(job.workerSub, paid, job.id);
@@ -221,14 +221,35 @@ app.post('/api/jobs/:id/complete', async (req, res) => {
 // Desktop (session with the active job) mints a 6-digit code; the phone redeems it within 5 minutes and receives the
 // same session cookie, so its sticks are accepted by the same claim check as the desktop's sliders.
 const pairCodes = new Map(); // code -> { sessionId, jobId, expiresAt }
-app.post('/api/pair/code', (req, res) => {
+// The pairing QR must carry a URL the phone can reach. PUBLIC_URL wins when it is a real host; when it is a
+// localhost address (npm run dev forces one) we ask the local ngrok agent for its https tunnel, then fall back
+// to the host the console itself was opened on, and only then to PUBLIC_URL.
+const tunnel = { url: null, at: 0 };
+async function tunnelUrl() {
+  if (Date.now() - tunnel.at < 30_000) return tunnel.url;
+  tunnel.at = Date.now();
+  try {
+    const j = await (await fetch('http://127.0.0.1:4040/api/tunnels', { signal: AbortSignal.timeout(600) })).json();
+    const ts = (j.tunnels || []).filter((t) => t.public_url?.startsWith('https://'));
+    tunnel.url = (ts.find((t) => String(t.config?.addr || '').endsWith(`:${PORT}`)) || ts[0])?.public_url || null;
+  } catch { tunnel.url = null; }
+  return tunnel.url;
+}
+const isLocal = (u) => /localhost|127\.0\.0\.1|\[::1\]/.test(String(u || ''));
+async function publicBase(req) {
+  if (!isLocal(PUBLIC_URL)) return PUBLIC_URL;
+  const t = await tunnelUrl(); if (t) return t;
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  return host && !isLocal(host) ? `${req.headers['x-forwarded-proto'] || req.protocol || 'http'}://${host}` : PUBLIC_URL;
+}
+app.post('/api/pair/code', async (req, res) => {
   const s = session(req, res);
   const job = jobs.current();
   if (!job || job.claimedBy !== s.id || !['claimed', 'active'].includes(job.state)) return res.status(403).json({ error: 'claim a job first, then pair' });
   for (const [c, v] of pairCodes) if (v.sessionId === s.id || v.expiresAt < Date.now()) pairCodes.delete(c);
   const code = String(Math.floor(100000 + Math.random() * 900000));
   pairCodes.set(code, { sessionId: s.id, jobId: job.id, expiresAt: Date.now() + 5 * 60_000 });
-  res.json({ code, expiresAt: Date.now() + 5 * 60_000, url: `${PUBLIC_URL}/controller.html?pair=${code}` });
+  res.json({ code, expiresAt: Date.now() + 5 * 60_000, url: `${await publicBase(req)}/controller.html?pair=${code}` });
 });
 app.post('/api/pair/redeem', (req, res) => {
   const code = String(req.body.code || '').replace(/\D/g, '');
@@ -238,9 +259,10 @@ app.post('/api/pair/redeem', (req, res) => {
   res.cookie('sid', v.sessionId, { httpOnly: true, sameSite: 'lax' });
   const owner = sessions.get(v.sessionId); if (owner?.sub) rememberIdentity(res, owner.sub);
   broadcast({ t: 'toast', level: 'ok', msg: `A controller paired to job ${v.jobId}.` });
+  broadcast({ t: 'paired', jobId: v.jobId, sessionId: v.sessionId }); // lets the console that showed the QR close it
   res.json({ ok: true, jobId: v.jobId });
 });
-app.get('/api/robot', (_req, res) => res.json({ name: 'Unitree G1', host: PUBLIC_URL, robot: sim.status(), job: jobs.current() }));
+app.get('/api/robot', async (req, res) => res.json({ name: 'Unitree G1', host: await publicBase(req), robot: sim.status(), job: jobs.current() }));
 
 // ---------- external agent API (bearer AGENT_TOKEN): the robot's agent picks up tasks and posts decisions ----------
 function agentAuth(req, res, next) {

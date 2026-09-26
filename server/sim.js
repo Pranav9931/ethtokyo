@@ -325,7 +325,7 @@ export class Sim extends EventEmitter {
       case 'request_removal': this.clearObstacle(); break;
       case 'pick_box': this.releaseDrag(); this.runMacro([{ op: 'aim' }, { pose: 'approach', dur: 1.0 }, { pose: 'descend', dur: 0.8 }, { pose: 'grasp', dur: 0.8 }, { op: 'pick' }, { pose: 'lift', dur: 0.8 }]); break;
       case 'manual_nudge': break;
-      case 'skip_part': this.feedNext(); break;
+      case 'skip_part': { this.releaseDrag(); if (this.held) this.drop(); const b = this.boxes[this.current]; this.placeFree(b.qadr, b.dadr, BOX_PARK[b.i]); this.feedNext(); break; } // the bad box goes to the park, otherwise it can shove the next one off the mark
       case 'pick': { const err = this.pick(); if (err) return err; break; }
       case 'drop': if (!this.held) return 'nothing is held'; this.drop(); break;
     }

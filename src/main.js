@@ -39,6 +39,7 @@ function connect() {
     else if (m.t === 'jobs') { Object.assign(state, { jobs: m.jobs, log: m.log, ledger: m.ledger }); refreshMe(); render(); }
     else if (m.t === 'toast') toast(m.msg, m.level);
     else if (m.t === 'denied') { state.denied = m.msg; render(); }
+    else if (m.t === 'paired') { if (wid.open && wid.pairing && m.sessionId === state.me?.sessionId) { widClose(); toast('Phone paired. The controller has the controls now.', 'ok'); } }
     else if (m.t === 'agent') { state.agentPhase = m.phase; renderRobot(); }
     else if (m.t === 'robot_voice') { if (m.kind === 'transcript') bubble.show(m.text, m.final); else if (!talker.active) speaker.handle(m); }
   };
@@ -153,7 +154,7 @@ function renderPad() {
     <div class="pad-top">
       <button class="pad-back" data-pad-off="1">▾ Details</button>
       <div class="pad-title"><b>${esc(job.title)}</b><span>${inControl ? 'operating' : job.state === 'reviewing' ? 'agent reviewing' : 'view only · accept to operate'}${r.resume && inControl ? ' · ' + esc(r.resume) : ''}</span></div>
-      ${inControl ? `<button class="pad-start" data-complete="${job.id}" ${r.resume ? 'disabled' : ''}>START ▶<small>submit</small></button>` : job.state === 'open' ? `<button class="pad-start" data-claim="${job.id}">ACCEPT<small>World ID</small></button>` : ''}
+      ${inControl ? `<button class="pad-start" data-complete="${job.id}" ${r.resume ? 'disabled' : ''}>START ▶<small>submit</small></button><button class="pad-start pad-cancel" data-cancel="${job.id}">✕<small>cancel</small></button>` : job.state === 'open' ? `<button class="pad-start" data-claim="${job.id}">ACCEPT<small>World ID</small></button>` : ''}
     </div>
     <div class="pad-chips">${(state.limbs || []).map((l, i) => `<button class="chip ${i === pad.limb ? 'on' : ''}" data-pad-limb="${i}">${esc(l.label)}</button>`).join('')}${pages > 1 ? `<button class="chip alt" data-pad-page="1">joints ${pad.page * 4 + 1}–${Math.min(padJoints().length, pad.page * 4 + 4)} ⟳</button>` : ''}</div>
     <div class="pad-body ${inControl ? '' : 'pad-locked'}">
@@ -182,7 +183,7 @@ document.addEventListener('click', (ev) => {
         <div class="wid-qr"><canvas id="wid-canvas"></canvas></div>
         <div class="wid-state" style="font:600 28px/1 ui-monospace,Menlo,monospace;letter-spacing:.25em">${r.code}</div>
         <div class="wid-actions"><a href="${esc(r.url)}" target="_blank" rel="noopener"><button class="sec btn-world" type="button">Open controller on this device</button></a></div>`);
-      wid.job = null; QRCode.toCanvas($('#wid-canvas'), r.url, { width: 208, margin: 0, color: { dark: '#181818', light: '#ffffff' } });
+      wid.job = null; wid.pairing = true; QRCode.toCanvas($('#wid-canvas'), r.url, { width: 208, margin: 0, color: { dark: '#181818', light: '#ffffff' } });
     }).catch((e) => toast(e.message, 'error'));
   }
   else if (b.dataset.padOff) padShow(false);
@@ -237,7 +238,7 @@ document.addEventListener('keydown', (ev) => {
 // modal, but the QR points at the local stand-in for World App.
 const wid = { open: false, abort: null };
 function widShow(html) { $('#wid-body').innerHTML = html; $('#wid').hidden = false; wid.open = true; }
-function widClose() { $('#wid').hidden = true; wid.open = false; wid.abort?.abort(); wid.abort = null; }
+function widClose() { $('#wid').hidden = true; wid.open = false; wid.pairing = false; wid.abort?.abort(); wid.abort = null; }
 $('#wid-close').onclick = async () => { if (wid.job) { await api(`/api/jobs/${wid.job}/cancel`, { method: 'POST' }).catch(() => {}); toast('Verification cancelled. Job returned to the pool, robot stays paused.', 'warn'); } widClose(); };
 
 function widQr(text, hint) {
@@ -342,10 +343,14 @@ function renderJointReadout() {
   const r = state.robot; if (!r) return;
   document.querySelectorAll('#job-view .joint .val').forEach((el) => { const i = +el.dataset.i; if (r.qpos[i] != null) el.textContent = `${r.qpos[i].toFixed(2)}`; });
 }
+// The pool shows one card so it is fully visible without scrolling; the rest sit behind a show-more button.
+const POOL_VISIBLE = 1; let poolExpanded = false;
 function renderBoard() {
   const open = state.jobs.filter((j) => j.state !== 'done' && j.state !== 'reviewing');
   $('#pool-count').textContent = open.length ? `${open.length} open` : '';
-  $('#jobs').innerHTML = state.jobs.length ? state.jobs.map((j) => `
+  const shown = poolExpanded ? state.jobs : state.jobs.slice(0, POOL_VISIBLE);
+  const hidden = state.jobs.length - shown.length;
+  $('#jobs').innerHTML = state.jobs.length ? shown.map((j) => `
     <div class="job ${j.state}">
       <div class="title"><span class="urg ${j.urgency}">${j.urgency}</span>${esc(j.title)}</div>
       <div class="reward">${j.reward} WLD</div>
@@ -354,15 +359,22 @@ function renderBoard() {
         ${j.state === 'open' ? `<button class="btn-world" data-claim="${j.id}"><span class="wmark"></span>Accept · Verify with World ID</button>` : ''}
         ${j.state !== 'open' ? `<button class="sec small" data-open="${j.id}">View</button>` : ''}
       </div>
-    </div>`).join('') : '<div class="empty">No jobs. The robot is working autonomously. Use the scenario buttons to get it stuck.</div>';
+    </div>`).join('') + (state.jobs.length > POOL_VISIBLE ? `<button class="sec small show-more" data-pool-toggle="1">${poolExpanded ? 'Show less' : `Show ${hidden} more`}</button>` : '')
+    : '<div class="empty">No jobs. The robot is working autonomously. Use the scenario buttons to get it stuck.</div>';
 }
+const PAY_VISIBLE = 3; let payExpanded = false;
 function renderLog() {
   $('#log').innerHTML = state.log.map((e) => `<div><b>#${e.jobId}</b> ${esc(e.msg)} <span class="muted">· ${ago(e.at)}</span></div>`).join('') || '<div class="empty">nothing yet</div>';
   const STATUS = { simulated: 'simulated', pending_address: 'waiting for wallet', submitting: 'sending…', submitted: 'sent, confirming…', confirmed: 'confirmed', failed: 'failed' };
-  $('#ledger').innerHTML = state.ledger.length ? state.ledger.map((l) => `
+  // Each human shows their three most recent payouts; older ones sit behind a show-more button.
+  let hiddenPays = 0;
+  $('#ledger').innerHTML = state.ledger.length ? state.ledger.map((l) => {
+    const pays = payExpanded ? l.payments : l.payments.slice(-PAY_VISIBLE); hiddenPays += l.payments.length - pays.length;
+    return `
     <div>${humanBadge(l.sub)}<span>${l.jobs} job${l.jobs > 1 ? 's' : ''} · <b style="color:var(--success-700)">${l.total} WLD</b></span></div>
     ${l.address ? `<div class="pay-addr">→ <code>${esc(l.address.slice(0, 8))}…${esc(l.address.slice(-6))}</code></div>` : ''}
-    ${l.payments.map((p) => `<div class="pay ${p.status}"><span>#${p.jobId} · ${p.amount} WLD</span><span class="pay-status">${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${STATUS[p.status] || p.status} ↗</a>` : esc(STATUS[p.status] || p.status)}${p.status === 'failed' ? ` <button class="small sec" data-retry-pay="${p.id}" title="${esc(p.error || '')}">retry</button>` : ''}</span></div>`).join('')}`).join('') : '<span class="muted">no payouts yet</span>';
+    ${pays.map((p) => `<div class="pay ${p.status}"><span>#${p.jobId} · ${p.amount} WLD</span><span class="pay-status">${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${STATUS[p.status] || p.status} ↗</a>` : esc(STATUS[p.status] || p.status)}${p.status === 'failed' ? ` <button class="small sec" data-retry-pay="${p.id}" title="${esc(p.error || '')}">retry</button>` : ''}</span></div>`).join('')}`;
+  }).join('') + (hiddenPays > 0 || payExpanded ? `<button class="sec small show-more" data-pay-toggle="1">${payExpanded ? 'Show less' : `Show ${hiddenPays} more`}</button>` : '') : '<span class="muted">no payouts yet</span>';
   const pi = state.me?.payments;
   $('#pay-info').textContent = pi ? (pi.enabled ? `Real payouts in WLD on ${pi.chain} from treasury ${pi.treasury.slice(0, 6)}…${pi.treasury.slice(-4)}` : 'Simulated payouts: set TREASURY_PRIVATE_KEY to pay real WLD on World Chain') : '';
 }
@@ -449,7 +461,7 @@ function renderJobView() {
     <div class="row">
       ${job.state === 'open' ? `<button class="btn-world" data-claim="${job.id}"><span class="wmark"></span>Accept · Verify with World ID</button>` : ''}
       ${job.state === 'claimed' && mine && !wid.open ? `<button data-retry="${job.id}">Retry verification</button><button class="sec" data-cancel="${job.id}">Cancel claim</button>` : ''}
-      ${inControl ? `<button data-complete="${job.id}" ${r.resume ? 'disabled' : ''}>Submit &amp; resume robot <kbd>⏎</kbd></button>` : ''}
+      ${inControl ? `<button data-complete="${job.id}" ${r.resume ? 'disabled' : ''}>Submit &amp; resume robot <kbd>⏎</kbd></button><button class="sec" data-cancel="${job.id}" title="Give the job back to the pool; the robot stays paused">Cancel job</button>` : ''}
       ${job.state !== 'done' && !inControl ? `<button class="bad" data-forge="${job.id}" title="Posts a fabricated proof straight to the backend">Try a forged proof</button>` : ''}
       ${mine && ['claimed', 'active'].includes(job.state) ? `<button class="ghost" data-pair="1" title="Hand the controls to your phone">📱 Pair phone</button>` : ''}
       <button class="ghost" data-pad-on="1" title="Game-pad controls">🎮 Pad</button>
@@ -469,6 +481,8 @@ function render() { renderRobot(); renderMe(); renderBoard(); renderLog(); rende
 // ---------- actions ----------
 document.addEventListener('click', async (ev) => {
   const b = ev.target.closest('button'); if (!b) return;
+  if (b.dataset.poolToggle) { poolExpanded = !poolExpanded; renderBoard(); return; }
+  if (b.dataset.payToggle) { payExpanded = !payExpanded; renderLog(); return; }
   try {
     if (b.dataset.claim || b.dataset.retry) {
       const id = b.dataset.claim || b.dataset.retry;
@@ -479,7 +493,7 @@ document.addEventListener('click', async (ev) => {
       // an action may move the arm: resync the manual-override sliders so they don't fight it
       syncSlidersFromRobot();
       toast(`Action sent: ${b.textContent.trim().split('\n')[0]}`, 'ok');
-    } else if (b.dataset.cancel) { await api(`/api/jobs/${b.dataset.cancel}/cancel`, { method: 'POST' }); toast('Claim cancelled, job returned to the pool. Robot stays paused.', 'warn'); }
+    } else if (b.dataset.cancel) { stopSending(); await api(`/api/jobs/${b.dataset.cancel}/cancel`, { method: 'POST' }); await refreshMe(); toast('Job cancelled and returned to the pool. Robot stays paused.', 'warn'); }
     else if (b.dataset.complete) { await api(`/api/jobs/${b.dataset.complete}/complete`, { method: 'POST' }); stopSending(); await refreshMe(); }
     else if (b.dataset.connectWallet) {
       if (!window.ethereum) return toast('No browser wallet detected. Paste your address instead.', 'warn');
