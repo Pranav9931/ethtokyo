@@ -25,7 +25,8 @@ function applyOrientation() {
   const vw = window.visualViewport?.width || innerWidth, vh = window.visualViewport?.height || innerHeight;
   document.documentElement.style.setProperty('--vw', `${Math.round(vw)}px`); document.documentElement.style.setProperty('--vh', `${Math.round(vh)}px`);
   window.scrollTo(0, 0);
-  const upright = vh > vw;
+  // only the cockpit is forced into landscape; the connect screen stays in the phone's natural orientation
+  const upright = vh > vw && document.body.classList.contains('cockpit');
   document.body.classList.toggle('force-landscape', upright);
   viewer.setSize(upright ? vh : vw, upright ? vw : vh);
 }
@@ -86,7 +87,7 @@ if (urlPair) { $('#pair-code').value = urlPair; pair(urlPair); }
 
 // ---------- cockpit ----------
 async function enterCockpit(jobId) {
-  $('#connect').hidden = true; $('#cockpit').hidden = false; document.body.classList.add('cockpit');
+  $('#connect').hidden = true; $('#cockpit').hidden = false; document.body.classList.add('cockpit'); applyOrientation();
   try { await document.documentElement.requestFullscreen?.(); } catch {}
   try { await screen.orientation?.lock?.('landscape'); } catch {}
   state.me = await api('/api/me');
@@ -170,7 +171,7 @@ document.addEventListener('click', async (ev) => {
     else if (b.id === 'sheet-close') $('#sheet').hidden = true;
     else if (b.dataset.claim) { const c = await api(`/api/jobs/${b.dataset.claim}/claim`, { method: 'POST' }); $('#sheet').hidden = true; await verifyOnPhone(c); }
     else if (b.dataset.cancel) { await api(`/api/jobs/${b.dataset.cancel}/cancel`, { method: 'POST' }); $('#sheet').hidden = true; }
-    else if (b.dataset.exit) { location.href = '/controller.html'; }
+    else if (b.dataset.exit) { document.body.classList.remove('cockpit'); location.href = '/controller.html'; }
   } catch (e) { toast(e.message, 'error'); buzz(60); }
 });
 
